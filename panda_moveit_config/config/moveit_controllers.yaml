@@ -19,6 +19,7 @@ moveit_simple_controller_manager:
       - panda_2_joint5
       - panda_2_joint6
       - panda_2_joint7
+    action_ns: follow_joint_trajectory
   panda_1_controller:
     type: FollowJointTrajectory
     joints:
@@ -29,6 +30,7 @@ moveit_simple_controller_manager:
       - panda_1_joint5
       - panda_1_joint6
       - panda_1_joint7
+    action_ns: follow_joint_trajectory
   hand_1_controller:
     type: GripperCommand
     joints:
