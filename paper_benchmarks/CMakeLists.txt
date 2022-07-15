@@ -25,6 +25,7 @@ include_directories(
 
 add_executable( benchmark_baseline
                 src/benchmark_baseline.cpp
+                src/scene.cpp
                 )
 
 ## Specify libraries to link a library or executable target against
@@ -37,6 +38,7 @@ ament_target_dependencies(benchmark_baseline
 
 add_executable( benchmark_synchronous 
                 src/benchmark_synchronous.cpp
+                src/scene.cpp
                 )
 
 ## Specify libraries to link a library or executable target against
@@ -49,6 +51,7 @@ ament_target_dependencies(benchmark_synchronous
 
 add_executable( benchmark_asynchronous 
                 src/benchmark_asynchronous.cpp
+                src/scene.cpp
                 )
 
 ## Specify libraries to link a library or executable target against
