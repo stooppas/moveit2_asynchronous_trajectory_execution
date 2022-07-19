@@ -10,5 +10,5 @@ def generate_launch_description():
     for entity in ld.entities:
         if type(entity) == Node:
             if entity.node_executable == "move_group":
-                entity._Node__parameters[-1][(TextSubstitution(text="publish_planning_scene_hz"),)] = 60.0
+                entity._Node__parameters[-1][(TextSubstitution(text="publish_planning_scene_hz"),)] = 30.0
     return ld

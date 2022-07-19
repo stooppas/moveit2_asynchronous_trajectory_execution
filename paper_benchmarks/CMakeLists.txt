@@ -26,6 +26,7 @@ include_directories(
 add_executable( benchmark_baseline
                 src/benchmark_baseline.cpp
                 src/scene.cpp
+                src/primitive_pick_and_place.cpp
                 )
 
 ## Specify libraries to link a library or executable target against
@@ -39,6 +40,7 @@ ament_target_dependencies(benchmark_baseline
 add_executable( benchmark_synchronous 
                 src/benchmark_synchronous.cpp
                 src/scene.cpp
+                src/primitive_pick_and_place.cpp
                 )
 
 ## Specify libraries to link a library or executable target against
@@ -52,10 +54,24 @@ ament_target_dependencies(benchmark_synchronous
 add_executable( benchmark_asynchronous 
                 src/benchmark_asynchronous.cpp
                 src/scene.cpp
+                src/primitive_pick_and_place.cpp
                 )
 
 ## Specify libraries to link a library or executable target against
 ament_target_dependencies(benchmark_asynchronous 
+  moveit_core
+  moveit_ros_planning_interface
+  controller_manager
+  rclcpp
+)
+
+add_executable( create_scene 
+                src/create_scene.cpp
+                src/scene.cpp
+                )
+
+## Specify libraries to link a library or executable target against
+ament_target_dependencies(create_scene 
   moveit_core
   moveit_ros_planning_interface
   controller_manager
@@ -67,7 +83,7 @@ ament_target_dependencies(benchmark_asynchronous
 #############
 ## Install ##
 #############
-install(TARGETS benchmark_asynchronous benchmark_synchronous benchmark_baseline
+install(TARGETS benchmark_asynchronous benchmark_synchronous benchmark_baseline create_scene
   ARCHIVE DESTINATION lib/${PROJECT_NAME}
   LIBRARY DESTINATION lib/${PROJECT_NAME}
   RUNTIME DESTINATION lib/${PROJECT_NAME}

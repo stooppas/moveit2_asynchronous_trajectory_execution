@@ -10,32 +10,54 @@ Scene::Scene(rclcpp::Node::SharedPtr node){
   {
     rclcpp::sleep_for(std::chrono::milliseconds(500));
   }
-  populate_blockList();
-  create_scene();
-
 }
 
-void Scene::populate_blockList(){
-  
-}
-
-void Scene::create_scene(){
-
+void Scene::create_random_scene()
+{
   moveit_msgs::msg::PlanningScene planning_scene;
   planning_scene.is_diff = true;
   int counter = 1;
+  float min_x = -0.45;
+  float max_x = 0.45;
+  float min_y = 0.35;
+  float max_y = -0.35;
+  while(counter < 30){
+      moveit_msgs::msg::CollisionObject object;
+      object.header.frame_id = "world";
+      object.id = "box_" + std::to_string(counter);
 
-  for(auto block: blockList){
-    moveit_msgs::msg::AttachedCollisionObject attached_object;
-    attached_object.link_name = "world";
-    attached_object.object.header.frame_id = "world";
-    attached_object.object.id = "block_" + std::to_string(counter++);
-    block.id = attached_object.object.id;
+      /* A default pose */
+      geometry_msgs::msg::Pose pose;
+      pose.position.x = min_x + static_cast <float> (rand()) /( static_cast <float> (RAND_MAX/(max_x-min_x)));
+      pose.position.y = min_y + static_cast <float> (rand()) /( static_cast <float> (RAND_MAX/(max_y-min_y)));
+      pose.position.z = 1.025;
+      pose.orientation.z = static_cast <float> (rand()) /( static_cast <float> (RAND_MAX));;
+      
+      bool isColliding = false;
 
-    attached_object.object.primitives.push_back(block.primitive);
-    attached_object.object.primitive_poses.push_back(block.pose);
-    planning_scene.world.collision_objects.push_back(attached_object.object);
+      for(auto object : planning_scene.world.collision_objects){
+        double len = sqrt(pow(pose.position.x - object.primitive_poses[0].position.x,2) + pow(pose.position.y - object.primitive_poses[0].position.y,2));
+        if(len < 0.08)
+        {
+          isColliding = true;
+          break;
+        }
+      }
 
+      if(isColliding)continue;
+      else counter++;
+
+      /* Define a box to be attached */
+      shape_msgs::msg::SolidPrimitive primitive;
+      primitive.type = primitive.BOX;
+      primitive.dimensions.resize(3);
+      primitive.dimensions[0] = 0.05;
+      primitive.dimensions[1] = 0.05;
+      primitive.dimensions[2] = 0.05;
+
+      object.primitives.push_back(primitive);
+      object.primitive_poses.push_back(pose);
+      planning_scene.world.collision_objects.push_back(object);
   }
   planning_scene_diff_publisher->publish(planning_scene);
 }
