@@ -4,6 +4,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <geometry_msgs/msg/point_stamped.hpp>
+#include <moveit/planning_scene_interface/planning_scene_interface.h>
 
 struct Block{
     Block(shape_msgs::msg::SolidPrimitive primitive,geometry_msgs::msg::Pose pose){

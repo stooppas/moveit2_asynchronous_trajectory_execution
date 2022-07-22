@@ -3,30 +3,60 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <moveit/move_group_interface/move_group_interface.h>
+#include <geometry_msgs/msg/pose.hpp>
 #include "paper_benchmarks/scene.hpp"
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
+
+struct tray_helper{
+    tray_helper(int x_limit,int y_limit,float x_offset,float y_offset){
+        this->x_limit = x_limit;
+        this->y_limit = y_limit;
+        this->x_offset = x_offset;
+        this->y_offset = y_offset;
+    }
+    int x;
+    int y; 
+    int z;
+
+    int x_limit;
+    int y_limit; 
+
+    float x_offset;
+    float y_offset;
+
+    void next(){
+        if(x + 1 < x_limit){
+            x++;
+        }else{
+            x = 0;
+            if(y + 1 < y_limit){
+                y++;
+            }else{
+                y = 0;
+                z++;
+            }
+        }
+    }
+};
 
 class primitive_pick_and_place{
     public: 
         primitive_pick_and_place(rclcpp::Node::SharedPtr node, std::string move_group,double timeout_duration = 60);
-        bool generate_pre_grasp_pose();
-        bool generate_grasp_pose();
-        bool generate_post_grasp_pose();
-        bool generate_move_pose();
-        bool generate_place_pose();
-        bool generate_post_place_pose();
+        bool set_joint_values_from_pose(geometry_msgs::msg::Pose& pose);
         std::vector<double> get_joint_values();
         bool generate_plan();
         bool execute();
         bool plan_and_execute();
         bool open_gripper();
         bool close_gripper();
-        void set_active_object(moveit_msgs::msg::CollisionObject& object);
-        bool grasp_object();
-        bool release_object();
+        bool grasp_object(moveit_msgs::msg::CollisionObject& object);
+        bool release_object(moveit_msgs::msg::CollisionObject& object);
+        std::map<std::string, moveit_msgs::msg::CollisionObject> getCollisionObjects();
+        std::map<std::string, moveit_msgs::msg::ObjectColor> getCollisionObjectColors();
+        bool home();
 
     private:
-        bool pose_to_joint_values(geometry_msgs::msg::Pose& pose);
+        std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> planning_interface;
         std::string move_group;
         rclcpp::Node::SharedPtr node;
         moveit::core::RobotModelConstPtr robot_model;

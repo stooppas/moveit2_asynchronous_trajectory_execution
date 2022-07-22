@@ -8,6 +8,9 @@ primitive_pick_and_place::primitive_pick_and_place(rclcpp::Node::SharedPtr node,
     move_group_interface = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node,move_group);
     move_group_interface->setMaxVelocityScalingFactor(1.0);
     move_group_interface->setMaxAccelerationScalingFactor(1.0);
+    move_group_interface->setNumPlanningAttempts(5);
+
+    planning_interface = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();
 
     robot_model = move_group_interface->getRobotModel();
     joint_model_group = robot_model->getJointModelGroup(move_group);
@@ -19,10 +22,26 @@ primitive_pick_and_place::primitive_pick_and_place(rclcpp::Node::SharedPtr node,
             RCLCPP_INFO(rclcpp::get_logger("Primitive_Pick_And_Place"),"Registered Gripper");
             gripper_group_interface = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node,eef->getName());
         }
-        
     }
 
 }
+
+bool primitive_pick_and_place::home()
+{
+    move_group_interface->setNamedTarget("home");
+    if(move_group_interface->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS && 
+        move_group_interface->execute(plan) == moveit::core::MoveItErrorCode::SUCCESS)return true;
+    else return false;
+}
+
+std::map<std::string, moveit_msgs::msg::CollisionObject> primitive_pick_and_place::getCollisionObjects(){
+    return planning_interface->getObjects();
+}
+
+std::map<std::string, moveit_msgs::msg::ObjectColor> primitive_pick_and_place::getCollisionObjectColors(){
+    return planning_interface->getObjectColors();
+}
+
 
 bool primitive_pick_and_place::open_gripper(){
     if(has_gripper){
@@ -44,123 +63,20 @@ bool primitive_pick_and_place::close_gripper(){
     }
 }
 
-void primitive_pick_and_place::set_active_object(moveit_msgs::msg::CollisionObject& object)
+bool primitive_pick_and_place::grasp_object(moveit_msgs::msg::CollisionObject& object)
 {
-    active_object = object;
+    if(move_group == "panda_1") move_group_interface->attachObject(object.id,"",{"base","panda_1_leftfinger","panda_1_rightfinger"});
+    else if(move_group == "panda_2") move_group_interface->attachObject(object.id,"",{"base","panda_2_leftfinger","panda_2_rightfinger"});
+    primitive_pick_and_place::close_gripper();
 }
 
-bool primitive_pick_and_place::grasp_object()
+bool primitive_pick_and_place::release_object(moveit_msgs::msg::CollisionObject& object)
 {
-    move_group_interface->attachObject(active_object.id,"",{"base"});
+    move_group_interface->detachObject(object.id);
+    primitive_pick_and_place::open_gripper();
 }
 
-bool primitive_pick_and_place::release_object()
-{
-    move_group_interface->detachObject(active_object.id);
-}
-
-bool primitive_pick_and_place::generate_pre_grasp_pose()
-{
-    geometry_msgs::msg::Pose pose;
-    
-    pose.position.x = active_object.pose.position.x;
-    pose.position.y = active_object.pose.position.y;
-    pose.position.z = active_object.pose.position.z + 0.25;
-
-    pose.orientation.x = active_object.pose.orientation.w;
-    pose.orientation.y = active_object.pose.orientation.z;
-    pose.orientation.z = 0;
-    pose.orientation.w = 0;
-    
-    return pose_to_joint_values(pose);
-}
-
-bool primitive_pick_and_place::generate_grasp_pose()
-{
-    geometry_msgs::msg::Pose pose;
-    
-    pose.position.x = active_object.pose.position.x;
-    pose.position.y = active_object.pose.position.y;
-    pose.position.z = active_object.pose.position.z + 0.1;
-
-    pose.orientation.x = active_object.pose.orientation.w;
-    pose.orientation.y = active_object.pose.orientation.z;
-    pose.orientation.z = 0;
-    pose.orientation.w = 0;
-
-    return pose_to_joint_values(pose);
-}
-
-bool primitive_pick_and_place::generate_post_grasp_pose()
-{
-    geometry_msgs::msg::Pose pose;
-    
-    pose.position.x = active_object.pose.position.x;
-    pose.position.y = active_object.pose.position.y;
-    pose.position.z = active_object.pose.position.z + 0.25;
-
-    pose.orientation.x = active_object.pose.orientation.w;
-    pose.orientation.y = active_object.pose.orientation.z;
-    pose.orientation.z = 0;
-    pose.orientation.w = 0;
-    
-    return pose_to_joint_values(pose);
-}
-
-bool primitive_pick_and_place::generate_move_pose()
-{
-    geometry_msgs::msg::Pose pose;
-
-    pose.position.x = -0.475 + counter * 0.06;
-    pose.position.y = -0.975;
-    pose.position.z = 1.275;
-
-    pose.orientation.x = 1;
-    pose.orientation.y = 0;
-    pose.orientation.z = 0;
-    pose.orientation.w = 0;
-
-    return pose_to_joint_values(pose);
-}
-
-bool primitive_pick_and_place::generate_place_pose()
-{
-    geometry_msgs::msg::Pose pose;
-
-    pose.position.x = -0.475 + counter * 0.06;
-    pose.position.y = -0.975;
-    pose.position.z = 1.125;
-
-    pose.orientation.w = 0;
-    pose.orientation.x = 1;
-    pose.orientation.y = 0;
-    pose.orientation.z = 0;
-
-    return pose_to_joint_values(pose);
-}
-
-bool primitive_pick_and_place::generate_post_place_pose()
-{
-    geometry_msgs::msg::Pose pose;
-
-    pose.position.x = -0.475 + counter * 0.06;
-    pose.position.y = -0.975;
-    pose.position.z = 1.275;
-
-    pose.orientation.w = 0;
-    pose.orientation.x = 1;
-    pose.orientation.y = 0;
-    pose.orientation.z = 0;
-
-    if(pose_to_joint_values(pose)){
-        counter++;
-        return true;
-    }
-
-    return false;
-}
-
-bool primitive_pick_and_place::pose_to_joint_values(geometry_msgs::msg::Pose& pose)
+bool primitive_pick_and_place::set_joint_values_from_pose(geometry_msgs::msg::Pose& pose)
 {
     auto current_state = move_group_interface->getCurrentState();
     bool found_ik = current_state->setFromIK(joint_model_group, pose, 0.1);
@@ -184,12 +100,13 @@ std::vector<double> primitive_pick_and_place::get_joint_values()
 
 bool primitive_pick_and_place::generate_plan()
 {
+    move_group_interface->setStartStateToCurrentState();
     return move_group_interface->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS;
 }
 
 bool primitive_pick_and_place::execute()
 {
-    return move_group_interface->execute(plan,rclcpp::Duration::from_seconds(timeout_duration)) == moveit::core::MoveItErrorCode::SUCCESS;
+    return move_group_interface->execute(plan) == moveit::core::MoveItErrorCode::SUCCESS;
 }
 
 bool primitive_pick_and_place::plan_and_execute()

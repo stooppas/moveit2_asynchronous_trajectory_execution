@@ -1,7 +1,9 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch.actions import IncludeLaunchDescription
 from moveit_configs_utils import MoveItConfigsBuilder
-from moveit_configs_utils.launches import generate_move_group_launch
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import ThisLaunchFileDir
 
 def generate_launch_description():
     moveit_config = MoveItConfigsBuilder("panda", package_name="panda_moveit_config").to_moveit_configs()
@@ -16,10 +18,16 @@ def generate_launch_description():
         ],
     )
 
+    start_scene = IncludeLaunchDescription(PythonLaunchDescriptionSource([ThisLaunchFileDir(), "/create_scene.launch.py"]))
+
+    create_scene = IncludeLaunchDescription(PythonLaunchDescriptionSource([ThisLaunchFileDir(), "/import_scene.launch.py"]))
+
     # Create the launch description and populate
     ld = LaunchDescription()
 
     # Add any conditioned actions
-    ld.add_action(move_group_node)    
+    ld.add_action(create_scene)
+    ld.add_action(start_scene)   
+    ld.add_action(move_group_node)
 
     return ld   
