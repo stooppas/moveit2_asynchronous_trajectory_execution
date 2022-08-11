@@ -7,7 +7,6 @@
 #include "paper_benchmarks/primitive_pick_and_place.hpp"
 
 rclcpp::Node::SharedPtr node;
-std::shared_ptr<Scene> scene;
 std::shared_ptr<primitive_pick_and_place> pnp;
 const rclcpp::Logger LOGGER = rclcpp::get_logger("benchmark_baseline");
 void main_thread();
