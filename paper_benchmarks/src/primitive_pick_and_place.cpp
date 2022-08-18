@@ -65,8 +65,8 @@ bool primitive_pick_and_place::close_gripper(){
 
 bool primitive_pick_and_place::grasp_object(moveit_msgs::msg::CollisionObject& object)
 {
-    if(move_group == "panda_1") move_group_interface->attachObject(object.id,"",{"base","panda_1_leftfinger","panda_1_rightfinger"});
-    else if(move_group == "panda_2") move_group_interface->attachObject(object.id,"",{"base","panda_2_leftfinger","panda_2_rightfinger"});
+    if(move_group == "panda_1") move_group_interface->attachObject(object.id,"",{"base","panda_1_leftfinger","panda_1_rightfinger","tray_red_1","tray_red_2","tray_blue_1","tray_blue_2"});
+    else if(move_group == "panda_2") move_group_interface->attachObject(object.id,"",{"base","panda_2_leftfinger","panda_2_rightfinger","tray_red_1","tray_red_2","tray_blue_1","tray_blue_2"});
     primitive_pick_and_place::close_gripper();
 }
 
@@ -78,7 +78,7 @@ bool primitive_pick_and_place::release_object(moveit_msgs::msg::CollisionObject&
 
 bool primitive_pick_and_place::set_joint_values_from_pose(geometry_msgs::msg::Pose& pose)
 {
-    auto current_state = move_group_interface->getCurrentState();
+    current_state = move_group_interface->getCurrentState();
     bool found_ik = current_state->setFromIK(joint_model_group, pose, 0.1);
 
     if(!found_ik){
@@ -89,7 +89,7 @@ bool primitive_pick_and_place::set_joint_values_from_pose(geometry_msgs::msg::Po
     current_state->copyJointGroupPositions(joint_model_group, joint_values);
 
     move_group_interface->setJointValueTarget(joint_names, joint_values);
-    
+
     return true;
 }
 
@@ -100,8 +100,12 @@ std::vector<double> primitive_pick_and_place::get_joint_values()
 
 bool primitive_pick_and_place::generate_plan()
 {
+    /*
     move_group_interface->setStartStateToCurrentState();
     return move_group_interface->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS;
+    */
+   move_group_interface->plan(plan);
+   return true;
 }
 
 bool primitive_pick_and_place::execute()

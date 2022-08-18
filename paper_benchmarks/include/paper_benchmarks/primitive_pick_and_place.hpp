@@ -57,6 +57,7 @@ class primitive_pick_and_place{
 
     private:
         std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> planning_interface;
+        std::shared_ptr<moveit::core::RobotState> current_state;
         std::string move_group;
         rclcpp::Node::SharedPtr node;
         moveit::core::RobotModelConstPtr robot_model;
