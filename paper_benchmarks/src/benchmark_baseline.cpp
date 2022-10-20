@@ -18,12 +18,19 @@ int main(int argc, char** argv)
 
 void main_thread()
 { 
+  srand(time(0));
   rclcpp::Rate r(1);
   bool success = false;
 
+  pnp->home();
+
   pnp->open_gripper();
 
-  auto objs = pnp->getCollisionObjects();
+  auto objMap = pnp->getCollisionObjects();
+
+  std::vector<moveit_msgs::msg::CollisionObject> objs;
+  for(const auto &obj : objMap)objs.push_back(obj.second);
+  std::random_shuffle(objs.begin(),objs.end());
 
   auto colors = pnp->getCollisionObjectColors();
 
@@ -31,83 +38,116 @@ void main_thread()
 
   geometry_msgs::msg::Pose pose;
 
-  tray_helper blue_tray(4,4,0.11,-0.925);
-  tray_helper red_tray(4,4,-0.425,-0.925);
+  tray_helper blue_tray(6,3,0.11,-0.925,0.06,0.1,true);
+  tray_helper red_tray(6,3,-0.425,-0.925,0.06,0.1,true);
   tray_helper* active_tray;
 
   for(auto obj : objs){
-    auto active_object = obj.second;
-    RCLCPP_INFO(LOGGER,"Object: %s",obj.first.c_str());
+    RCLCPP_INFO(LOGGER,"Object: %s",obj.id.c_str());
 
     //Check if the object is a box
-    if(obj.first.rfind("box",0) != 0) continue;
+    if(obj.id.rfind("box",0) != 0)
+    {
+      RCLCPP_INFO(LOGGER,"Skipping");
+      continue;
+    }
 
-    if(colors[obj.first].color.r == 1 && colors[obj.first].color.g == 0 && colors[obj.first].color.b == 0)active_tray = &red_tray;
-    else if(colors[obj.first].color.r == 0 && colors[obj.first].color.g == 0 && colors[obj.first].color.b == 1)active_tray = &blue_tray;
+    if(colors[obj.id].color.r == 1 && colors[obj.id].color.g == 0 && colors[obj.id].color.b == 0)active_tray = &red_tray;
+    else if(colors[obj.id].color.r == 0 && colors[obj.id].color.g == 0 && colors[obj.id].color.b == 1)active_tray = &blue_tray;
     else continue;
 
     //Pre Grasp
-    pose.position.x = active_object.pose.position.x;
-    pose.position.y = active_object.pose.position.y;
-    pose.position.z = active_object.pose.position.z + 0.25;
+    pose.position.x = obj.pose.position.x;
+    pose.position.y = obj.pose.position.y;
+    pose.position.z = obj.pose.position.z + 0.25;
 
-    pose.orientation.x = active_object.pose.orientation.w;
-    pose.orientation.y = active_object.pose.orientation.z;
+    pose.orientation.x = obj.pose.orientation.w;
+    pose.orientation.y = obj.pose.orientation.z;
     pose.orientation.z = 0;
     pose.orientation.w = 0;
 
-    if(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute())
+    tf2::Quaternion q_orig, q_rot, q_new;
+
+    tf2::convert(pose.orientation,q_orig);
+
+    tf2::Matrix3x3 m(q_orig);
+    double roll,pitch,yaw;
+    m.getRPY(roll,pitch,yaw);
+
+
+    int attempts = 1;
+    float offset = 0;
+
+
+    while(!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
     {
-      //Grasp
-      pose.position.z = active_object.pose.position.z + 0.1;
+      RCLCPP_INFO(LOGGER,"Retrying");
+      /*
+      offset = static_cast <float> (rand()) /( static_cast <float> (RAND_MAX/0.05)) - 0.025;
+      pose.position.x = obj.pose.position.x + offset*sin(yaw);
+      pose.position.y = obj.pose.position.y + offset*cos(yaw);
+      //Rotate Gripper
+      /*
+      tf2::Quaternion q_orig, q_rot, q_new;
 
-      if(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute())
-      {
-        pnp->grasp_object(active_object);
+      tf2::convert(pose.orientation,q_orig);
 
-        //Once grasped, no turning back! From now, ensure execution with while
+      q_rot.setRPY(0,0,(attempts++%4) *1.57079633);
 
-        //Pre Move
-        pose.position.z = active_object.pose.position.z + 0.25;
-
-        while(!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
-        {
-          RCLCPP_INFO(LOGGER,"Try again");
-        }
-
-        //Move
-        pose.position.x = active_tray->x_offset + active_tray->x * 0.06;
-        pose.position.y = active_tray->y_offset + active_tray->y * 0.1;
-        pose.position.z = 1.28 + active_tray->z * 0.05;
-
-        pose.orientation.x = 1;
-        pose.orientation.y = 0;
-
-        while(!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
-        {
-          RCLCPP_INFO(LOGGER,"Try again 2");
-        }
-        // Put down
-        pose.position.z = 1.13 + active_tray->z * 0.05;
-
-        while(!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
-        {
-          RCLCPP_INFO(LOGGER,"Try again 3");
-        }
-        pnp->release_object(active_object);
-        //Post Move
-        pose.position.z = 1.28 + active_tray->z * 0.05; 
-
-        while(!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
-        {
-          RCLCPP_INFO(LOGGER,"Try again 4");
-        }
-        active_tray->next();
-        success = true;
-      }
+      q_new = q_rot*q_orig;
+      q_new.normalize();
+      tf2::convert(q_new,pose.orientation);
+      */
     }
+
+    //Grasp
+    pose.position.z = obj.pose.position.z + 0.1;
+
+    while(!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
+    {
+      RCLCPP_INFO(LOGGER,"Retrying");
+    }
+    pnp->grasp_object(obj);
+
+    //Pre Move
+    pose.position.z = obj.pose.position.z + 0.25;
+
+    while(!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
+    {
+      RCLCPP_INFO(LOGGER,"Retrying");
+    }
+
+    //Move
+    pose.position.x = active_tray->get_x();
+    pose.position.y = active_tray->get_y();
+    pose.position.z = 1.28 + active_tray->z * 0.05;
+
+    pose.orientation.x = 1;
+    pose.orientation.y = 0;
+
+    while(!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
+    {
+      RCLCPP_INFO(LOGGER,"Retrying");
+    }
+    // Put down
+    pose.position.z = 1.141 + active_tray->z * 0.05;
+
+    while(!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
+    {
+      RCLCPP_INFO(LOGGER,"Retrying");
+    }
+    pnp->release_object(obj);
+    //Post Move
+    pose.position.z = 1.28 + active_tray->z * 0.05; 
+
+    while(!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
+    {
+      RCLCPP_INFO(LOGGER,"Retrying");
+    }
+    active_tray->next();
+    success = true;
     r.sleep();
   }
   
-
+  RCLCPP_INFO(LOGGER,"Finished");
 }

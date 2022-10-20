@@ -15,32 +15,34 @@ Scene::Scene(rclcpp::Node::SharedPtr node){
 void Scene::create_random_scene()
 {
   auto planning_interface = new moveit::planning_interface::PlanningSceneInterface();
+
+  srand(time(0));
   
   std::vector<moveit_msgs::msg::CollisionObject> collision_objects;
   std::vector<moveit_msgs::msg::ObjectColor> object_colors;
 
   int counter = 1;
-  float min_x = -0.45;
-  float max_x = 0.45;
-  float min_y = 0.35;
-  float max_y = -0.35;
-  while(counter < 30){
+  float min_x = -0.35;
+  float max_x = 0.35;
+  float min_y = 0.25;
+  float max_y = -0.25;
+  while(counter < 20){
       moveit_msgs::msg::CollisionObject object;
-      object.header.frame_id = "world";
+      object.header.frame_id = "base";
       object.id = "box_" + std::to_string(counter);
 
       /* A default pose */
       geometry_msgs::msg::Pose pose;
       pose.position.x = min_x + static_cast <float> (rand()) /( static_cast <float> (RAND_MAX/(max_x-min_x)));
       pose.position.y = min_y + static_cast <float> (rand()) /( static_cast <float> (RAND_MAX/(max_y-min_y)));
-      pose.position.z = 1.025;
+      pose.position.z = 1.026;
       pose.orientation.z = static_cast <float> (rand()) /( static_cast <float> (RAND_MAX));;
       
       bool isColliding = false;
 
       for(auto object : collision_objects){
         double len = sqrt(pow(pose.position.x - object.primitive_poses[0].position.x,2) + pow(pose.position.y - object.primitive_poses[0].position.y,2));
-        if(len < 0.08)
+        if(len < 0.1)
         {
           isColliding = true;
           break;

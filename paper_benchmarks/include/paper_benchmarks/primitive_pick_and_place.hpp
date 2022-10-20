@@ -8,11 +8,14 @@
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 
 struct tray_helper{
-    tray_helper(int x_limit,int y_limit,float x_offset,float y_offset){
+    tray_helper(int x_limit,int y_limit,float x_offset,float y_offset,float x_spacing, float y_spacing,bool direction){
         this->x_limit = x_limit;
         this->y_limit = y_limit;
         this->x_offset = x_offset;
         this->y_offset = y_offset;
+        this->x_spacing = x_spacing;
+        this->y_spacing = y_spacing;
+        this->direction = direction;
     }
     int x;
     int y; 
@@ -23,6 +26,23 @@ struct tray_helper{
 
     float x_offset;
     float y_offset;
+
+    float x_spacing;
+    float y_spacing;
+    bool direction;
+
+    float get_x(){
+        return x_offset + x * x_spacing;
+    }
+
+    float get_y(){
+        if(direction){
+            return y_offset + y * y_spacing;
+        }else{
+            return y_offset - y * y_spacing;
+        }
+    }
+
 
     void next(){
         if(x + 1 < x_limit){

@@ -28,10 +28,9 @@ primitive_pick_and_place::primitive_pick_and_place(rclcpp::Node::SharedPtr node,
 
 bool primitive_pick_and_place::home()
 {
+    move_group_interface->setStartStateToCurrentState();
     move_group_interface->setNamedTarget("home");
-    if(move_group_interface->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS && 
-        move_group_interface->execute(plan) == moveit::core::MoveItErrorCode::SUCCESS)return true;
-    else return false;
+    return plan_and_execute();
 }
 
 std::map<std::string, moveit_msgs::msg::CollisionObject> primitive_pick_and_place::getCollisionObjects(){
@@ -45,6 +44,7 @@ std::map<std::string, moveit_msgs::msg::ObjectColor> primitive_pick_and_place::g
 
 bool primitive_pick_and_place::open_gripper(){
     if(has_gripper){
+        gripper_group_interface->setStartStateToCurrentState();
         gripper_group_interface->setNamedTarget("open");
         return gripper_group_interface->move() == moveit::core::MoveItErrorCode::SUCCESS;
     }
@@ -55,6 +55,7 @@ bool primitive_pick_and_place::open_gripper(){
 
 bool primitive_pick_and_place::close_gripper(){
     if(has_gripper){
+        gripper_group_interface->setStartStateToCurrentState();
         gripper_group_interface->setNamedTarget("closed");
         return gripper_group_interface->move() == moveit::core::MoveItErrorCode::SUCCESS;
     }
@@ -65,8 +66,8 @@ bool primitive_pick_and_place::close_gripper(){
 
 bool primitive_pick_and_place::grasp_object(moveit_msgs::msg::CollisionObject& object)
 {
-    if(move_group == "panda_1") move_group_interface->attachObject(object.id,"",{"base","panda_1_leftfinger","panda_1_rightfinger","tray_red_1","tray_red_2","tray_blue_1","tray_blue_2"});
-    else if(move_group == "panda_2") move_group_interface->attachObject(object.id,"",{"base","panda_2_leftfinger","panda_2_rightfinger","tray_red_1","tray_red_2","tray_blue_1","tray_blue_2"});
+    if(move_group == "panda_1") move_group_interface->attachObject(object.id,"",{"base","panda_1_leftfinger","panda_1_rightfinger","tray_red_1","tray_red_2","tray_blue_1","tray_blue_2",object.id});
+    else if(move_group == "panda_2") move_group_interface->attachObject(object.id,"",{"base","panda_2_leftfinger","panda_2_rightfinger","tray_red_1","tray_red_2","tray_blue_1","tray_blue_2",object.id});
     primitive_pick_and_place::close_gripper();
 }
 
@@ -100,17 +101,13 @@ std::vector<double> primitive_pick_and_place::get_joint_values()
 
 bool primitive_pick_and_place::generate_plan()
 {
-    /*
     move_group_interface->setStartStateToCurrentState();
     return move_group_interface->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS;
-    */
-   move_group_interface->plan(plan);
-   return true;
 }
 
 bool primitive_pick_and_place::execute()
 {
-    return move_group_interface->execute(plan) == moveit::core::MoveItErrorCode::SUCCESS;
+    return move_group_interface->execute(plan,rclcpp::Duration::from_seconds(10)) == moveit::core::MoveItErrorCode::SUCCESS;
 }
 
 bool primitive_pick_and_place::plan_and_execute()

@@ -21,7 +21,14 @@ void main_thread()
 { 
   rclcpp::Rate r(5);
 
-  auto objs = pnp_1->getCollisionObjects();
+  pnp_1->home();
+  pnp_2->home();
+
+  auto objMap = pnp_1->getCollisionObjects();
+
+  std::vector<moveit_msgs::msg::CollisionObject> objs;
+  for(const auto &obj : objMap)objs.push_back(obj.second);
+  std::random_shuffle(objs.begin(),objs.end());
 
   auto colors = pnp_1->getCollisionObjectColors();
 
@@ -33,8 +40,8 @@ void main_thread()
 
   while(it != objs.end()){
     if(!panda_1_busy || !panda_2_busy){
-      auto active_object = it->second;
-      auto object_id = it->first;
+      auto active_object = *it;
+      auto object_id = (*it).id;
       RCLCPP_INFO(LOGGER,"Object: %s",object_id.c_str());
 
       //Check if the object is a box
@@ -51,9 +58,10 @@ void main_thread()
         else continue;
         new std::thread([&](){
           panda_1_busy = true;
-          executeTrajectory(pnp_1,active_object,active_tray);
+          executeTrajectory(pnp_1,*it,active_tray);
           panda_1_busy = false;
         });
+        std::this_thread::sleep_for(0.2s);
         it++;
       }
       else if (!panda_2_busy)
@@ -64,9 +72,10 @@ void main_thread()
         else continue;
         new std::thread([&](){
           panda_2_busy = true;
-          executeTrajectory(pnp_2,active_object,active_tray);
+          executeTrajectory(pnp_2,*it,active_tray);
           panda_2_busy = false;
         });
+        std::this_thread::sleep_for(0.2s);
         it++;
       }
     }
@@ -74,9 +83,12 @@ void main_thread()
   }
 }
 bool executeTrajectory(std::shared_ptr<primitive_pick_and_place> pnp,moveit_msgs::msg::CollisionObject& object,tray_helper* tray)
-{
+{ 
+  RCLCPP_INFO(LOGGER,"Start execution of Object: %s",object.id.c_str());
   geometry_msgs::msg::Pose pose;
   pnp->open_gripper();
+
+  std::this_thread::sleep_for(0.2s);
 
   //Pre Grasp
   pose.position.x = object.pose.position.x;
@@ -113,8 +125,8 @@ bool executeTrajectory(std::shared_ptr<primitive_pick_and_place> pnp,moveit_msgs
   }
 
   //Move
-  pose.position.x = tray->x_offset + tray->x * 0.06;
-  pose.position.y = tray->y_offset + tray->y * 0.1;
+  pose.position.x = tray->get_x();
+  pose.position.y = tray->get_y();
   pose.position.z = 1.28 + tray->z * 0.05;
 
   pose.orientation.x = 1;
@@ -125,7 +137,7 @@ bool executeTrajectory(std::shared_ptr<primitive_pick_and_place> pnp,moveit_msgs
     RCLCPP_INFO(LOGGER,"Try again 2");
   }
   // Put down
-  pose.position.z = 1.13 + tray->z * 0.05;
+  pose.position.z = 1.141 + tray->z * 0.05;
 
   while(!(pnp->set_joint_values_from_pose(pose) && pnp->generate_plan() && pnp->execute()))
   {
