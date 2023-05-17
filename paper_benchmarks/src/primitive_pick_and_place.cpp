@@ -102,7 +102,8 @@ std::vector<double> primitive_pick_and_place::get_joint_values()
 bool primitive_pick_and_place::generate_plan()
 {
     move_group_interface->setStartStateToCurrentState();
-    return move_group_interface->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS;
+    plan_success = move_group_interface->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS;
+    return plan_success;
 }
 
 bool primitive_pick_and_place::execute()
@@ -113,4 +114,9 @@ bool primitive_pick_and_place::execute()
 bool primitive_pick_and_place::plan_and_execute()
 {
     return move_group_interface->move() == moveit::core::MoveItErrorCode::SUCCESS;
+}
+
+bool primitive_pick_and_place::is_plan_successful()
+{
+    return plan_success;
 }

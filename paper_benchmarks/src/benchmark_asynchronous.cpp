@@ -2,6 +2,8 @@
 
 using namespace std::chrono_literals;
 
+std::mutex mtx;
+
 int main(int argc, char** argv)
 {
   rclcpp::init(argc,argv);
@@ -24,46 +26,76 @@ void main_thread()
   pnp_1->home();
   pnp_2->home();
 
+  // get the map<string, collision object>
   auto objMap = pnp_1->getCollisionObjects();
 
   std::vector<moveit_msgs::msg::CollisionObject> objs;
   for(const auto &obj : objMap)objs.push_back(obj.second);
-  std::random_shuffle(objs.begin(),objs.end());
+  //std::random_shuffle(objs.begin(),objs.end());
 
+  // get the map<string, object color>
   auto colors = pnp_1->getCollisionObjectColors();
 
   RCLCPP_INFO(LOGGER,"Size: %i",objs.size());
 
   int i = 0;
 
-  auto it = objs.begin();
+  //auto it = objs.begin();
 
-  while(it != objs.end()){
+  //while(it != objs.end()){
+  while(!objs.empty()){
+    moveit_msgs::msg::CollisionObject current_object;
+    
+    // start planning if atleast one of the arms are available
     if(!panda_1_busy || !panda_2_busy){
-      auto active_object = *it;
-      auto object_id = (*it).id;
+
+      {
+      std::lock_guard<std::mutex> lock(mtx);
+      current_object = objs.front();
+      objs.erase(objs.begin());
+      }
+
+      //auto active_object = *it;
+      //auto object_id = (*it).id;
+      auto active_object = current_object;
+      auto object_id = current_object.id;
       RCLCPP_INFO(LOGGER,"Object: %s",object_id.c_str());
 
       //Check if the object is a box
       if(object_id.rfind("box",0) != 0){
-        it++;
+        //it++;
         continue;
       }
 
+      bool panda_1_success = true;
+      bool panda_2_success = true;
+
+      // plan for if the arm one is not busy
       if(!panda_1_busy)
       {
         tray_helper* active_tray;
         if(colors[object_id].color.r == 1 && colors[object_id].color.g == 0 && colors[object_id].color.b == 0)active_tray = &red_tray_1;
         else if(colors[object_id].color.r == 0 && colors[object_id].color.g == 0 && colors[object_id].color.b == 1)active_tray = &blue_tray_1;
         else continue;
+
         new std::thread([&](){
           panda_1_busy = true;
-          executeTrajectory(pnp_1,*it,active_tray);
+          auto current_object_1 = std::move(current_object);
+          bool panda_1_success = executeTrajectory(pnp_1, current_object_1,active_tray);
+          
+          if(!panda_1_success)
+          {
+            std::lock_guard<std::mutex> lock(mtx);
+            objs.push_back(current_object_1);
+          }
           panda_1_busy = false;
         });
         std::this_thread::sleep_for(0.2s);
-        it++;
+        //it++;
+        
       }
+      
+      // plan for if the arm one is not busy
       else if (!panda_2_busy)
       {
         tray_helper* active_tray;
@@ -72,16 +104,28 @@ void main_thread()
         else continue;
         new std::thread([&](){
           panda_2_busy = true;
-          executeTrajectory(pnp_2,*it,active_tray);
+          auto current_object_2 = std::move(current_object);
+          panda_2_success = executeTrajectory(pnp_2, current_object_2,active_tray);
+          
+          if(!panda_2_success)
+          {
+            std::lock_guard<std::mutex> lock(mtx);
+            objs.push_back(current_object_2);
+          }
           panda_2_busy = false;
         });
         std::this_thread::sleep_for(0.2s);
-        it++;
+        //it++;
+        
       }
     }
     r.sleep();
   }
+
+  RCLCPP_INFO(LOGGER, "Execution completed" );
+
 }
+
 bool executeTrajectory(std::shared_ptr<primitive_pick_and_place> pnp,moveit_msgs::msg::CollisionObject& object,tray_helper* tray)
 { 
   RCLCPP_INFO(LOGGER,"Start execution of Object: %s",object.id.c_str());
@@ -102,14 +146,22 @@ bool executeTrajectory(std::shared_ptr<primitive_pick_and_place> pnp,moveit_msgs
 
   while(!(pnp->set_joint_values_from_pose(pose) && pnp->generate_plan() && pnp->execute()))
   {
-    RCLCPP_INFO(LOGGER,"Try again");
+    RCLCPP_INFO(LOGGER,"Try again pre grasp failed");
+    if(!pnp->is_plan_successful()){
+        RCLCPP_ERROR(LOGGER,"Pre grasp Planner failed");
+        return false;
+    }
   }
   //Grasp
   pose.position.z = object.pose.position.z + 0.1;
 
   while(!(pnp->set_joint_values_from_pose(pose) && pnp->generate_plan() && pnp->execute()))
   {
-    RCLCPP_INFO(LOGGER,"Try again");
+    RCLCPP_INFO(LOGGER,"Try again grasp failed");
+    if(!pnp->is_plan_successful()){
+        RCLCPP_ERROR(LOGGER,"Pre Grasp Planner failed");
+        return false;
+    }
   }
   pnp->grasp_object(object);
   RCLCPP_INFO(LOGGER,"Grasping object with ID %s",object.id.c_str());
@@ -121,7 +173,7 @@ bool executeTrajectory(std::shared_ptr<primitive_pick_and_place> pnp,moveit_msgs
 
   while(!(pnp->set_joint_values_from_pose(pose) && pnp->generate_plan() && pnp->execute()))
   {
-    RCLCPP_INFO(LOGGER,"Try again");
+    RCLCPP_INFO(LOGGER,"Try again pre move failed");
   }
 
   //Move
@@ -134,14 +186,14 @@ bool executeTrajectory(std::shared_ptr<primitive_pick_and_place> pnp,moveit_msgs
 
   while(!(pnp->set_joint_values_from_pose(pose) && pnp->generate_plan() && pnp->execute()))
   {
-    RCLCPP_INFO(LOGGER,"Try again 2");
+    RCLCPP_INFO(LOGGER,"Try again move failed");
   }
   // Put down
   pose.position.z = 1.141 + tray->z * 0.05;
 
   while(!(pnp->set_joint_values_from_pose(pose) && pnp->generate_plan() && pnp->execute()))
   {
-    RCLCPP_INFO(LOGGER,"Try again 3");
+    RCLCPP_INFO(LOGGER,"Try again put down failed");
   }
   pnp->release_object(object);
   //Post Move
@@ -149,7 +201,7 @@ bool executeTrajectory(std::shared_ptr<primitive_pick_and_place> pnp,moveit_msgs
 
   while(!(pnp->set_joint_values_from_pose(pose) && pnp->generate_plan() && pnp->execute()))
   {
-    RCLCPP_INFO(LOGGER,"Try again 4");
+    RCLCPP_INFO(LOGGER,"Try again post move failed");
   }
   tray->next();
 

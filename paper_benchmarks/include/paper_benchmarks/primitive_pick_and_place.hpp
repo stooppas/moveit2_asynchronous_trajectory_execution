@@ -65,6 +65,7 @@ class primitive_pick_and_place{
         bool set_joint_values_from_pose(geometry_msgs::msg::Pose& pose);
         std::vector<double> get_joint_values();
         bool generate_plan();
+        bool is_plan_successful();
         bool execute();
         bool plan_and_execute();
         bool open_gripper();
@@ -91,6 +92,7 @@ class primitive_pick_and_place{
         bool has_gripper = false;
         int counter = 0;
         moveit_msgs::msg::CollisionObject active_object;
+        bool plan_success = false;
 
 };
 
