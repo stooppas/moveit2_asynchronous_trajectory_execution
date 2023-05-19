@@ -1,8 +1,18 @@
 #include "paper_benchmarks/benchmark_asynchronous.hpp"
+#include <thread>
+#include <iostream>
+#include "std_msgs/msg/string.hpp"
 
 using namespace std::chrono_literals;
 
 std::mutex mtx;
+
+rclcpp::Publisher<std_msgs::msg::String>::SharedPtr publisher_;
+std::vector<std::string> all_objects;
+std::vector<moveit_msgs::msg::CollisionObject> objs;
+
+std::map<std::string, moveit_msgs::msg::CollisionObject> objMap;
+std::map<std::string, moveit_msgs::msg::ObjectColor> colors;
 
 int main(int argc, char** argv)
 {
@@ -13,10 +23,48 @@ int main(int argc, char** argv)
   pnp_1 = std::make_shared<primitive_pick_and_place>(node,"panda_1");
   pnp_2 = std::make_shared<primitive_pick_and_place>(node,"panda_2");
 
-  new std::thread(main_thread);
+  
+  publisher_ = node->create_publisher<std_msgs::msg::String>("spawnNewCube", 10);
 
+
+  //we need another thread to update the obj when new object spawns in the environment
+  new std::thread(update_planning_scene);
+
+  new std::thread(main_thread);
+  
   rclcpp::spin(node);
   rclcpp::shutdown();
+}
+
+void update_planning_scene(){
+
+  while(true){
+
+    objMap = pnp_1->getCollisionObjects();
+    colors = pnp_1->getCollisionObjectColors();  
+
+    for (const auto& pair : objMap) {
+      auto it = std::find(all_objects.begin(), all_objects.end(), pair.second.id);
+      
+      // not found in the object list
+      if(it == all_objects.end()){
+        all_objects.push_back(pair.second.id);
+
+        // dummy scope for mutex
+        {
+        std::lock_guard<std::mutex> lock(mtx);
+        objs.push_back(pair.second);
+        }
+
+        std::cout << "++++++++++++++++ new object detected +++++++++++++" << std::endl;
+      }
+      
+    }
+
+    std::this_thread::sleep_for(1.0s);
+    
+  }  
+
 }
 
 void main_thread()
@@ -27,14 +75,15 @@ void main_thread()
   pnp_2->home();
 
   // get the map<string, collision object>
-  auto objMap = pnp_1->getCollisionObjects();
+  //auto objMap = pnp_1->getCollisionObjects();
 
-  std::vector<moveit_msgs::msg::CollisionObject> objs;
-  for(const auto &obj : objMap)objs.push_back(obj.second);
+  
+  //for(const auto &obj : objMap)objs.push_back(obj.second);
   //std::random_shuffle(objs.begin(),objs.end());
 
   // get the map<string, object color>
-  auto colors = pnp_1->getCollisionObjectColors();
+  //auto colors = pnp_1->getCollisionObjectColors();
+  //update_planning_scene();
 
   RCLCPP_INFO(LOGGER,"Size: %i",objs.size());
 
@@ -87,6 +136,10 @@ void main_thread()
           {
             std::lock_guard<std::mutex> lock(mtx);
             objs.push_back(current_object_1);
+          }else{
+            RCLCPP_ERROR(LOGGER, "spawing new cube <------------------------------------>");
+            auto message = std_msgs::msg::String();
+            publisher_->publish(message);
           }
           panda_1_busy = false;
         });

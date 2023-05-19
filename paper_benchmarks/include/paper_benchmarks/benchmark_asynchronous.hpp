@@ -23,6 +23,7 @@ bool panda_2_busy = false;
 
 const rclcpp::Logger LOGGER = rclcpp::get_logger("benchmark_asynchronous");
 void main_thread();
+void update_planning_scene();
 bool executeTrajectory(std::shared_ptr<primitive_pick_and_place> pnp,moveit_msgs::msg::CollisionObject& object,tray_helper* tray);
 
 #endif
