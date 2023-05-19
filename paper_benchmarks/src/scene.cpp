@@ -48,8 +48,8 @@ void Scene::add_objects_to_scene(int numObjects){
   int counter = 0;
   float min_x = -0.35;
   float max_x = 0.35;
-  float min_y = 0.25;
-  float max_y = -0.25;
+  float min_y = -0.25; //0.25
+  float max_y = 0.25; //-0.25
   while(counter < numObjects){
     bool successful = createNewObject(box_number, min_x,max_x, max_y, min_y, collision_objects, object_colors);
     if (successful) {
