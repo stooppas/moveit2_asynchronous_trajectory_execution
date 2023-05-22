@@ -1,5 +1,6 @@
 #include "paper_benchmarks/scene.hpp"
 #include <iostream>
+#include <thread>
 
 int box_number = 0;
 
@@ -18,6 +19,11 @@ void Scene::create_random_scene()
 {
   add_objects_to_scene(10);
 }
+
+//here add_objects_to_scene are called using separate threads hence accessing planning
+//scene should be done using a mutex
+
+std::mutex mute;
 
 void Scene::add_objects_to_scene(int numObjects){
   auto planning_interface = new moveit::planning_interface::PlanningSceneInterface();
@@ -45,22 +51,26 @@ void Scene::add_objects_to_scene(int numObjects){
     }
   }
 
-  int counter = 0;
-  float min_x = -0.35;
-  float max_x = 0.35;
-  float min_y = -0.25; //0.25
-  float max_y = 0.25; //-0.25
-  while(counter < numObjects){
-    bool successful = createNewObject(box_number, min_x,max_x, max_y, min_y, collision_objects, object_colors);
-    if (successful) {
-      counter++; 
-      box_number++;
+    // create a separate scope for the thread
+  {
+    std::lock_guard<std::mutex> lock(mute);
+
+    int counter = 0;
+    float min_x = -0.35;
+    float max_x = 0.35;
+    float min_y = -0.25; //0.25
+    float max_y = 0.25; //-0.25
+    while(counter < numObjects){
+      bool successful = createNewObject(box_number, min_x,max_x, max_y, min_y, collision_objects, object_colors);
+      if (successful) {
+        counter++; 
+        box_number++;
+      }
     }
+
+    //planning_interface->addCollisionObjects(collision_objects,object_colors); 
+    planning_interface->applyCollisionObjects(collision_objects,object_colors);
   }
-
-  //planning_interface->addCollisionObjects(collision_objects,object_colors);
-
-  planning_interface->applyCollisionObjects(collision_objects,object_colors);
 }
 
 bool Scene::createNewObject(int counter, float min_x,float max_x, float max_y, float min_y, 

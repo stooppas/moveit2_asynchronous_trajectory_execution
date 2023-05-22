@@ -13,6 +13,7 @@ std::vector<moveit_msgs::msg::CollisionObject> objs;
 
 std::map<std::string, moveit_msgs::msg::CollisionObject> objMap;
 std::map<std::string, moveit_msgs::msg::ObjectColor> colors;
+bool update_scene_called_once = false;
 
 int main(int argc, char** argv)
 {
@@ -56,12 +57,13 @@ void update_planning_scene(){
         objs.push_back(pair.second);
         }
 
-        std::cout << "++++++++++++++++ new object detected +++++++++++++" << std::endl;
+        RCLCPP_INFO(LOGGER,"New object detected. id: %s", pair.second.id);
       }
       
     }
 
     std::this_thread::sleep_for(1.0s);
+    update_scene_called_once = true;
     
   }  
 
@@ -73,25 +75,16 @@ void main_thread()
 
   pnp_1->home();
   pnp_2->home();
-
-  // get the map<string, collision object>
-  //auto objMap = pnp_1->getCollisionObjects();
-
   
-  //for(const auto &obj : objMap)objs.push_back(obj.second);
-  //std::random_shuffle(objs.begin(),objs.end());
 
-  // get the map<string, object color>
-  //auto colors = pnp_1->getCollisionObjectColors();
-  //update_planning_scene();
+  while(!update_scene_called_once){
+    std::this_thread::sleep_for(1.0s);
+  }
 
   RCLCPP_INFO(LOGGER,"Size: %i",objs.size());
 
   int i = 0;
 
-  //auto it = objs.begin();
-
-  //while(it != objs.end()){
   while(!objs.empty()){
     moveit_msgs::msg::CollisionObject current_object;
     
@@ -104,15 +97,12 @@ void main_thread()
       objs.erase(objs.begin());
       }
 
-      //auto active_object = *it;
-      //auto object_id = (*it).id;
       auto active_object = current_object;
       auto object_id = current_object.id;
       RCLCPP_INFO(LOGGER,"Object: %s",object_id.c_str());
 
       //Check if the object is a box
       if(object_id.rfind("box",0) != 0){
-        //it++;
         continue;
       }
 
@@ -144,7 +134,6 @@ void main_thread()
           panda_1_busy = false;
         });
         std::this_thread::sleep_for(0.2s);
-        //it++;
         
       }
       
@@ -164,11 +153,14 @@ void main_thread()
           {
             std::lock_guard<std::mutex> lock(mtx);
             objs.push_back(current_object_2);
+          }else{
+            RCLCPP_ERROR(LOGGER, "spawing new cube <------------------------------------>");
+            auto message = std_msgs::msg::String();
+            publisher_->publish(message);
           }
           panda_2_busy = false;
         });
         std::this_thread::sleep_for(0.2s);
-        //it++;
         
       }
     }
