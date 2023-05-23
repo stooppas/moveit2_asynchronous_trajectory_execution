@@ -2,6 +2,7 @@
 #include <thread>
 #include <iostream>
 #include "std_msgs/msg/string.hpp"
+#include "paper_benchmarks/cube_selector.hpp"
 
 using namespace std::chrono_literals;
 
@@ -15,26 +16,60 @@ std::map<std::string, moveit_msgs::msg::CollisionObject> objMap;
 std::map<std::string, moveit_msgs::msg::ObjectColor> colors;
 bool update_scene_called_once = false;
 
+
+void main_thread2();
+
 int main(int argc, char** argv)
 {
   rclcpp::init(argc,argv);
 
   node = std::make_shared<rclcpp::Node>("benchmark_asynchronous");
 
+
+  //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  // Test codes 
+  //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
   pnp_1 = std::make_shared<primitive_pick_and_place>(node,"panda_1");
-  pnp_2 = std::make_shared<primitive_pick_and_place>(node,"panda_2");
 
   
-  publisher_ = node->create_publisher<std_msgs::msg::String>("spawnNewCube", 10);
+
+
+
+  //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  // End of Test codes 
+  //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+  //pnp_1 = std::make_shared<primitive_pick_and_place>(node,"panda_1");
+  //pnp_2 = std::make_shared<primitive_pick_and_place>(node,"panda_2");
+
+  
+  //publisher_ = node->create_publisher<std_msgs::msg::String>("spawnNewCube", 10);
 
 
   //we need another thread to update the obj when new object spawns in the environment
-  new std::thread(update_planning_scene);
+  //new std::thread(update_planning_scene);
 
-  new std::thread(main_thread);
+  new std::thread(main_thread2);
   
   rclcpp::spin(node);
   rclcpp::shutdown();
+}
+
+void main_thread2(){
+  objMap = pnp_1->getCollisionObjects();
+
+  CubeContainer container;
+
+  for (const auto& pair : objMap) {     
+    container.addCubes(pair.second);
+  }
+
+  Point3D e(0,0,0); //simulate end-effector
+
+  for (auto it = container.beginEuclidean(e); it != container.endEuclidean(e); ++it) {
+    std::cout << "(" << (*it).pose.position.x << ", " << (*it).pose.position.y << ", " << (*it).pose.position.z << ")" << std::endl;
+  }
 }
 
 void update_planning_scene(){
@@ -57,7 +92,7 @@ void update_planning_scene(){
         objs.push_back(pair.second);
         }
 
-        RCLCPP_INFO(LOGGER,"New object detected. id: %s", pair.second.id);
+        RCLCPP_INFO(LOGGER,"New object detected. id: %s", pair.second.id.c_str());
       }
       
     }
@@ -81,9 +116,11 @@ void main_thread()
     std::this_thread::sleep_for(1.0s);
   }
 
-  RCLCPP_INFO(LOGGER,"Size: %i",objs.size());
+  RCLCPP_INFO(LOGGER,"Size: %li",objs.size());
 
   int i = 0;
+
+  RCLCPP_INFO(LOGGER,"[checkpoint]");
 
   while(!objs.empty()){
     moveit_msgs::msg::CollisionObject current_object;
@@ -92,9 +129,15 @@ void main_thread()
     if(!panda_1_busy || !panda_2_busy){
 
       {
-      std::lock_guard<std::mutex> lock(mtx);
-      current_object = objs.front();
-      objs.erase(objs.begin());
+        std::lock_guard<std::mutex> lock(mtx);
+        current_object = objs.front();
+        objs.erase(objs.begin());
+        RCLCPP_INFO(LOGGER,"[checkpoint]");
+        if(i==3){
+          RCLCPP_INFO(LOGGER,"[terminate]");
+        }else{
+        i++;
+        }
       }
 
       auto active_object = current_object;
