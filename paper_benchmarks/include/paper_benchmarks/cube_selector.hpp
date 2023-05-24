@@ -2,6 +2,7 @@
 #include <vector>
 #include <cmath>
 #include <random>
+#include <queue>
 #include <moveit/move_group_interface/move_group_interface.h> 
 
 typedef moveit_msgs::msg::CollisionObject CollisionObject;
@@ -15,11 +16,20 @@ struct Point3D {
     Point3D(float px, float py, float pz) : x(px), y(py), z(pz) {}
 };
 
-template<typename Policy>
-class CubeIterator;
+struct EuclideanDistanceComparator{
+    const Point3D endEffector;
 
-struct EuclideanDistancePolicy{
-    static float distance(const CollisionObject &cube, const Point3D &point){
+    explicit EuclideanDistanceComparator(const Point3D &e): endEffector(e){}
+
+    bool operator()(const CollisionObject &obj1, const CollisionObject &obj2) const{
+        float distance1 = calculateEuclideanDistance(obj1, endEffector);
+        float distance2 = calculateEuclideanDistance(obj2, endEffector);
+        return distance1 > distance2;
+
+    }
+
+private:
+    float calculateEuclideanDistance(const CollisionObject &cube, const Point3D &point) const{
         float dx = cube.pose.position.x - point.x;
         float dy = cube.pose.position.y - point.y;
         float dz = cube.pose.position.z - point.z;
@@ -27,124 +37,60 @@ struct EuclideanDistancePolicy{
     }
 };
 
-struct RandomCubePolicy{
-    static int getRandomCube(size_t size){
-        //CollisionObject cube = cubes.front();
-        //cubes.erase(cubes.begin());
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dist(0, size); // Modify the range as needed
-
-        int index  = dist(gen);
-        return index;
-    }
-};
-
-
-template<typename Policy>
-class CubeIterator{
-
-private:
-    const std::vector<CollisionObject> points;
-    size_t currentIndex;
+// Functor for comparing two points based on random order
+struct RandomComparator {
     const Point3D endEffector;
-    float previous_min;
-    float counter;
+
+    explicit RandomComparator(const Point3D &e): endEffector(e){}
+
+    bool operator()(const CollisionObject &obj1, const CollisionObject &obj2) const {
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+        std::uniform_int_distribution<> dis(0, 1);
+        return dis(gen) == 0; // Randomly select between p1 and p2
+    }
+};
+
+template<typename Comparator>
+class ThreadSafeCubeQueue{
+private:
+    std::priority_queue<CollisionObject, std::vector<CollisionObject>, Comparator> priority_queue;
+    mutable std::mutex mutex;
 
 public:
-    CubeIterator(const std::vector<CollisionObject> p, const Point3D e, 
-        size_t index = 0): points(p), currentIndex(index), endEffector(e), previous_min(0), counter(0){}
+    explicit ThreadSafeCubeQueue(const Comparator &comparator): priority_queue(comparator){}
 
-    //Dereferece operator
-    const CollisionObject& operator*(){
-        return points[currentIndex];
+    void push(CollisionObject &cube){
+        std::lock_guard<std::mutex> lock(mutex);
+        priority_queue.push(cube);
     }
 
-    //pre-increment operator
-    CubeIterator& operator++(){
-        if constexpr(std::is_same_v<Policy, RandomCubePolicy>){
-            int index = Policy::getRandomCube(points.size());
-            currentIndex = index;
-
-        }else{
-            float minDistance = std::numeric_limits<float>::max();
-            size_t nextIndex = currentIndex;
-
-            for(size_t i=0; i < points.size(); ++i){
-                if(i == currentIndex) continue; 
-
-                float distance = Policy::distance(points[i], endEffector);
-                std::cout << "distance    " << distance << std::endl;
-                if(distance > previous_min){
-                    if(distance < minDistance){
-                        minDistance = distance;
-                        nextIndex = i;
-                    }
-                }
-            }
-            counter++;
-            currentIndex = nextIndex;
-            previous_min = Policy::distance(points[currentIndex], endEffector);
-            std::cout << "current    " << currentIndex << std::endl;
-
-        }
-
-        return *this;
-    }
-    
-    //post-increment operator
-    // CubeIterator& operator++(int){
-    //     CubeIterator temp = *this;
-    //     ++(*this);
-    //     return temp;
-    // }
-
-    // Equality operator
-    bool operator==(const CubeIterator& other) const {
-        return currentIndex == other.currentIndex;
+    bool empty() const{
+        std::lock_guard<std::mutex> lock(mutex);
+        return priority_queue.empty();
     }
 
-    // Inequality operator
-    bool operator!=(const CubeIterator& other) const {
-        return currentIndex != other.currentIndex;
+    size_t size() const{
+        std::lock_guard<std::mutex> lock(mutex);
+        return priority_queue.size();
+    }
+
+    void pop(){
+        std::lock_guard<std::mutex> lock(mutex);
+        priority_queue.pop();
+    }
+
+    CollisionObject top(){
+        std::lock_guard<std::mutex> lock(mutex);
+        return priority_queue.top();
     }
 
 };
 
-
-class CubeContainer{
-
-private:
-    std::vector<moveit_msgs::msg::CollisionObject> cubes;
-
+class ThreadSafeCubeQueueFactory {
 public:
-    void addCubes(moveit_msgs::msg::CollisionObject cube){
-        cubes.emplace_back(cube);
-    }
-
-    CubeIterator<RandomCubePolicy> beginRandom(const Point3D e){
-        return CubeIterator<RandomCubePolicy>(cubes, e);
-    }
-
-    CubeIterator<RandomCubePolicy> endRandom(const Point3D e){
-        return CubeIterator<RandomCubePolicy>(cubes, e, cubes.size());
-    }
-
-    CubeIterator<EuclideanDistancePolicy> beginEuclidean(const Point3D e){
-        return CubeIterator<EuclideanDistancePolicy>(cubes, e);
-    }
-
-    CubeIterator<EuclideanDistancePolicy> endEuclidean(const Point3D e){
-        size_t current_index = 0;
-        float maxDistance = 0;
-
-        for(size_t i=0; i < cubes.size(); ++i){
-            float distance = EuclideanDistancePolicy::distance(cubes[i], e);
-            if(distance > maxDistance){
-                maxDistance = distance;
-                current_index = i;
-            }
-        }
-        return CubeIterator<EuclideanDistancePolicy>(cubes, e, current_index);
+    template<typename Comparator>
+    static ThreadSafeCubeQueue<Comparator> createPriorityQueue(const Point3D& referencePoint) {
+        return ThreadSafeCubeQueue<Comparator>(Comparator(referencePoint));
     }
 };

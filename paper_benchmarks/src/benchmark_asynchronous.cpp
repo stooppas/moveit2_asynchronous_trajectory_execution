@@ -25,51 +25,18 @@ int main(int argc, char** argv)
 
   node = std::make_shared<rclcpp::Node>("benchmark_asynchronous");
 
-
-  //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-  // Test codes 
-  //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
   pnp_1 = std::make_shared<primitive_pick_and_place>(node,"panda_1");
+  pnp_2 = std::make_shared<primitive_pick_and_place>(node,"panda_2");
 
   
-
-
-
-  //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-  // End of Test codes 
-  //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-  //pnp_1 = std::make_shared<primitive_pick_and_place>(node,"panda_1");
-  //pnp_2 = std::make_shared<primitive_pick_and_place>(node,"panda_2");
-
-  
-  //publisher_ = node->create_publisher<std_msgs::msg::String>("spawnNewCube", 10);
+  publisher_ = node->create_publisher<std_msgs::msg::String>("spawnNewCube", 10);
 
 
   //we need another thread to update the obj when new object spawns in the environment
-  //new std::thread(update_planning_scene);
-
-  new std::thread(main_thread2);
+  new std::thread(update_planning_scene);
   
   rclcpp::spin(node);
   rclcpp::shutdown();
-}
-
-void main_thread2(){
-  objMap = pnp_1->getCollisionObjects();
-
-  CubeContainer container;
-
-  for (const auto& pair : objMap) {     
-    container.addCubes(pair.second);
-  }
-
-  Point3D e(0,0,0); //simulate end-effector
-
-  for (auto it = container.beginEuclidean(e); it != container.endEuclidean(e); ++it) {
-    std::cout << "(" << (*it).pose.position.x << ", " << (*it).pose.position.y << ", " << (*it).pose.position.z << ")" << std::endl;
-  }
 }
 
 void update_planning_scene(){
