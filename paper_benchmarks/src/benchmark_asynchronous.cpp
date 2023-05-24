@@ -6,11 +6,12 @@
 
 using namespace std::chrono_literals;
 
-std::mutex mtx;
-
 rclcpp::Publisher<std_msgs::msg::String>::SharedPtr publisher_;
 std::vector<std::string> all_objects;
-std::vector<moveit_msgs::msg::CollisionObject> objs;
+//std::vector<moveit_msgs::msg::CollisionObject> objs;
+//ThreadSafeCubeQueue<EuclideanDistanceComparator> objs;
+Point3D e(0,0,0);
+auto objs = ThreadSafeCubeQueueFactory::createPriorityQueue<EuclideanDistanceComparator>(e);
 
 std::map<std::string, moveit_msgs::msg::CollisionObject> objMap;
 std::map<std::string, moveit_msgs::msg::ObjectColor> colors;
@@ -34,6 +35,8 @@ int main(int argc, char** argv)
 
   //we need another thread to update the obj when new object spawns in the environment
   new std::thread(update_planning_scene);
+
+  new std::thread(main_thread);
   
   rclcpp::spin(node);
   rclcpp::shutdown();
@@ -46,18 +49,14 @@ void update_planning_scene(){
     objMap = pnp_1->getCollisionObjects();
     colors = pnp_1->getCollisionObjectColors();  
 
-    for (const auto& pair : objMap) {
+    for (auto& pair : objMap) {
       auto it = std::find(all_objects.begin(), all_objects.end(), pair.second.id);
       
       // not found in the object list
       if(it == all_objects.end()){
         all_objects.push_back(pair.second.id);
 
-        // dummy scope for mutex
-        {
-        std::lock_guard<std::mutex> lock(mtx);
-        objs.push_back(pair.second);
-        }
+        objs.push(pair.second);
 
         RCLCPP_INFO(LOGGER,"New object detected. id: %s", pair.second.id.c_str());
       }
@@ -96,9 +95,9 @@ void main_thread()
     if(!panda_1_busy || !panda_2_busy){
 
       {
-        std::lock_guard<std::mutex> lock(mtx);
-        current_object = objs.front();
-        objs.erase(objs.begin());
+        objs.topComparator().updateEndEffector(e);
+        current_object = objs.top();
+        objs.pop();
         RCLCPP_INFO(LOGGER,"[checkpoint]");
         if(i==3){
           RCLCPP_INFO(LOGGER,"[terminate]");
@@ -134,8 +133,7 @@ void main_thread()
           
           if(!panda_1_success)
           {
-            std::lock_guard<std::mutex> lock(mtx);
-            objs.push_back(current_object_1);
+            objs.push(current_object_1);
           }else{
             RCLCPP_ERROR(LOGGER, "spawing new cube <------------------------------------>");
             auto message = std_msgs::msg::String();
@@ -161,8 +159,7 @@ void main_thread()
           
           if(!panda_2_success)
           {
-            std::lock_guard<std::mutex> lock(mtx);
-            objs.push_back(current_object_2);
+            objs.push(current_object_2);
           }else{
             RCLCPP_ERROR(LOGGER, "spawing new cube <------------------------------------>");
             auto message = std_msgs::msg::String();

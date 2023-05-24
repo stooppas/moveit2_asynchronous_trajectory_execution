@@ -17,7 +17,11 @@ struct Point3D {
 };
 
 struct EuclideanDistanceComparator{
-    const Point3D endEffector;
+    Point3D endEffector;
+
+    void updateEndEffector(const Point3D &e){
+        endEffector = e;
+    }
 
     explicit EuclideanDistanceComparator(const Point3D &e): endEffector(e){}
 
@@ -39,7 +43,7 @@ private:
 
 // Functor for comparing two points based on random order
 struct RandomComparator {
-    const Point3D endEffector;
+    Point3D endEffector;
 
     explicit RandomComparator(const Point3D &e): endEffector(e){}
 
@@ -55,10 +59,12 @@ template<typename Comparator>
 class ThreadSafeCubeQueue{
 private:
     std::priority_queue<CollisionObject, std::vector<CollisionObject>, Comparator> priority_queue;
+    Comparator comparator;
     mutable std::mutex mutex;
 
 public:
-    explicit ThreadSafeCubeQueue(const Comparator &comparator): priority_queue(comparator){}
+    explicit ThreadSafeCubeQueue(const Comparator &com): comparator(com), priority_queue(comparator){
+    }
 
     void push(CollisionObject &cube){
         std::lock_guard<std::mutex> lock(mutex);
@@ -83,6 +89,10 @@ public:
     CollisionObject top(){
         std::lock_guard<std::mutex> lock(mutex);
         return priority_queue.top();
+    }
+
+    Comparator& topComparator(){
+        return comparator;
     }
 
 };
