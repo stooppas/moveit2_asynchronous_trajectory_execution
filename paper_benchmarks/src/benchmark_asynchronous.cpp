@@ -44,7 +44,11 @@ void update_planning_scene()
       {
         all_objects.push_back(pair.second.id);
 
-        objs.push(pair.second);
+        CollisionPlanningObject new_object(pair.second, 0, 0);
+        // new_object.collisionObject = pair.second;
+        // new_object.robot_1_planned_times = 0;
+        // new_object.robot_2_planned_times = 0;
+        objs.push( new_object);
 
         RCLCPP_INFO(LOGGER, "New object detected. id: %s", pair.second.id.c_str());
       }
@@ -75,7 +79,9 @@ void main_thread()
 
   while (!objs.empty())
   {
-    moveit_msgs::msg::CollisionObject current_object;
+    //moveit_msgs::msg::CollisionObject current_object;
+    CollisionPlanningObject current_object;
+    std::string curren_planning_robot = "robot_1";
 
     // start planning if atleast one of the arms are available
     if (!panda_1_busy || !panda_2_busy)
@@ -87,16 +93,18 @@ void main_thread()
         e.x = 0;
         e.y = -0.5;
         e.z = 1;
+        curren_planning_robot = "robot_1";
       }
       else if (!panda_2_busy)
       {
         e.x = 0;
         e.y = 0.5;
         e.z = 1;
+        curren_planning_robot = "robot_2";
       }
 
       objs.updatePoint(e);
-      current_object = objs.pop();
+      current_object = objs.pop(curren_planning_robot);
       RCLCPP_INFO(LOGGER, "[checkpoint]");
       if (i == 3)
       {
@@ -107,8 +115,8 @@ void main_thread()
         i++;
       }
 
-      auto active_object = current_object;
-      auto object_id = current_object.id;
+      //auto active_object = current_object.collisionObject;
+      auto object_id = current_object.collisionObject.id;
       RCLCPP_INFO(LOGGER, "Object: %s", object_id.c_str());
 
       // Check if the object is a box
@@ -135,7 +143,7 @@ void main_thread()
                         {
           panda_1_busy = true;
           auto current_object_1 = std::move(current_object);
-          bool panda_1_success = executeTrajectory(pnp_1, current_object_1,active_tray);
+          bool panda_1_success = executeTrajectory(pnp_1, current_object_1.collisionObject,active_tray);
           
           if(!panda_1_success)
           {
@@ -163,7 +171,7 @@ void main_thread()
                         {
           panda_2_busy = true;
           auto current_object_2 = std::move(current_object);
-          panda_2_success = executeTrajectory(pnp_2, current_object_2,active_tray);
+          panda_2_success = executeTrajectory(pnp_2, current_object_2.collisionObject,active_tray);
           
           if(!panda_2_success)
           {

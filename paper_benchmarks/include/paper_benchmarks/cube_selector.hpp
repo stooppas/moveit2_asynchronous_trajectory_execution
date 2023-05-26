@@ -20,10 +20,32 @@ struct Point3D
     Point3D(float px, float py, float pz) : x(px), y(py), z(pz) {}
 };
 
+struct CollisionPlanningObject
+{
+    CollisionObject collisionObject;
+    int robot_1_planned_times;
+    int robot_2_planned_times;
+
+    CollisionPlanningObject() {}
+
+    CollisionPlanningObject(CollisionObject c, int r_1, int r_2) : collisionObject(c), robot_1_planned_times(r_1), robot_2_planned_times(r_2) {}
+
+    CollisionPlanningObject &operator=(const CollisionPlanningObject &other)
+    {
+        if (this != &other)
+        {
+            collisionObject = other.collisionObject;
+            robot_1_planned_times = other.robot_1_planned_times;
+            robot_2_planned_times = other.robot_2_planned_times;
+        }
+        return *this;
+    }
+};
+
 class ThreadSafeCubeQueue
 {
 private:
-    std::vector<CollisionObject> priority_queue;
+    std::vector<CollisionPlanningObject> priority_queue;
     Point3D point;
     mutable std::mutex mutex;
 
@@ -38,7 +60,7 @@ private:
 public:
     explicit ThreadSafeCubeQueue(const Point3D &p) : point(p) {}
 
-    void push(CollisionObject &cube)
+    void push(CollisionPlanningObject &cube)
     {
         std::lock_guard<std::mutex> lock(mutex);
         priority_queue.push_back(cube);
@@ -62,7 +84,7 @@ public:
         point = p;
     }
 
-    CollisionObject pop()
+    CollisionPlanningObject pop(std::string robot_planning)
     {
         std::lock_guard<std::mutex> lock(mutex);
         size_t current_index = 0;
@@ -70,14 +92,28 @@ public:
 
         for (size_t i = 0; i < priority_queue.size(); ++i)
         {
-            float distance = calculateEuclideanDistance(priority_queue[i], point);
+            float distance = calculateEuclideanDistance(priority_queue[i].collisionObject, point);
             if (distance < minDistance)
             {
+                if (robot_planning.compare("robot_1") && priority_queue[i].robot_1_planned_times >= 5 ||
+                    robot_planning.compare("robot_2") && priority_queue[i].robot_2_planned_times >= 5)
+                {
+                    continue;
+                }
                 minDistance = distance;
                 current_index = i;
             }
         }
-        CollisionObject minObject = priority_queue[current_index];
+
+        CollisionPlanningObject minObject = priority_queue[current_index];
+        if (robot_planning.compare("robot_1"))
+        {
+            minObject.robot_1_planned_times++;
+        }
+        else
+        {
+            minObject.robot_2_planned_times++;
+        }
         priority_queue.erase(priority_queue.begin() + current_index);
         return minObject;
     }
