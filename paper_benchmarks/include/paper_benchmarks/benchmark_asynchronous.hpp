@@ -6,6 +6,8 @@
 #include "paper_benchmarks/scene.hpp"
 #include "paper_benchmarks/primitive_pick_and_place.hpp"
 #include <chrono>
+#include "std_msgs/msg/string.hpp"
+#include "paper_benchmarks/cube_selector.hpp"
 
 using namespace std::chrono_literals;
 
@@ -25,5 +27,14 @@ const rclcpp::Logger LOGGER = rclcpp::get_logger("benchmark_asynchronous");
 void main_thread();
 void update_planning_scene();
 bool executeTrajectory(std::shared_ptr<primitive_pick_and_place> pnp,moveit_msgs::msg::CollisionObject& object,tray_helper* tray);
+
+rclcpp::Publisher<std_msgs::msg::String>::SharedPtr publisher_;
+std::vector<std::string> all_objects;
+Point3D e(0,0,0);
+ThreadSafeCubeQueue objs(e);
+
+std::map<std::string, moveit_msgs::msg::CollisionObject> objMap;
+std::map<std::string, moveit_msgs::msg::ObjectColor> colors;
+bool update_scene_called_once = false;
 
 #endif
