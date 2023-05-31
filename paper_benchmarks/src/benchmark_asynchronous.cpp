@@ -101,17 +101,6 @@ void main_thread()
       objs.updatePoint(e);
       current_object = objs.pop(curren_planning_robot, "");
       
-      /*
-      RCLCPP_INFO(LOGGER, "[checkpoint]");
-      if (i == 3)
-      {
-        RCLCPP_INFO(LOGGER, "[terminate]");
-      }
-      else
-      {
-        i++;
-      }
-      */
 
       auto object_id = current_object.collisionObject.id;
       RCLCPP_INFO(LOGGER, "Object: %s", object_id.c_str());
