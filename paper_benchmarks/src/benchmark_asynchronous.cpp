@@ -17,7 +17,6 @@ int main(int argc, char **argv)
 
   publisher_ = node->create_publisher<std_msgs::msg::String>("spawnNewCube", 10);
 
-  // we need another thread to update the obj when new object spawns in the environment
   new std::thread(update_planning_scene);
 
   new std::thread(main_thread);
@@ -45,9 +44,6 @@ void update_planning_scene()
         all_objects.push_back(pair.second.id);
 
         CollisionPlanningObject new_object(pair.second, 0, 0);
-        // new_object.collisionObject = pair.second;
-        // new_object.robot_1_planned_times = 0;
-        // new_object.robot_2_planned_times = 0;
         objs.push( new_object);
 
         RCLCPP_INFO(LOGGER, "New object detected. id: %s", pair.second.id.c_str());
@@ -79,7 +75,6 @@ void main_thread()
 
   while (!objs.empty())
   {
-    //moveit_msgs::msg::CollisionObject current_object;
     CollisionPlanningObject current_object;
     std::string curren_planning_robot = "robot_1";
 
@@ -87,7 +82,7 @@ void main_thread()
     if (!panda_1_busy || !panda_2_busy)
     {
 
-      // change e based on the robot available
+      // change end effector position based on the robot available
       if (!panda_1_busy)
       {
         e.x = 0;
@@ -104,7 +99,9 @@ void main_thread()
       }
 
       objs.updatePoint(e);
-      current_object = objs.pop(curren_planning_robot);
+      current_object = objs.pop(curren_planning_robot, "");
+      
+      /*
       RCLCPP_INFO(LOGGER, "[checkpoint]");
       if (i == 3)
       {
@@ -114,8 +111,8 @@ void main_thread()
       {
         i++;
       }
+      */
 
-      //auto active_object = current_object.collisionObject;
       auto object_id = current_object.collisionObject.id;
       RCLCPP_INFO(LOGGER, "Object: %s", object_id.c_str());
 
@@ -139,8 +136,7 @@ void main_thread()
         else
           continue;
 
-        new std::thread([&]()
-                        {
+        new std::thread([&](){
           panda_1_busy = true;
           auto current_object_1 = std::move(current_object);
           bool panda_1_success = executeTrajectory(pnp_1, current_object_1.collisionObject,active_tray);
@@ -149,11 +145,12 @@ void main_thread()
           {
             objs.push(current_object_1);
           }else{
-            RCLCPP_ERROR(LOGGER, "spawing new cube <------------------------------------>");
+            RCLCPP_INFO(LOGGER, "Robot 1 successful placing. Request to spawn a new cube ");
             auto message = std_msgs::msg::String();
             publisher_->publish(message);
           }
-          panda_1_busy = false; });
+          panda_1_busy = false; 
+          });
         std::this_thread::sleep_for(0.2s);
       }
 
@@ -167,8 +164,7 @@ void main_thread()
           active_tray = &blue_tray_2;
         else
           continue;
-        new std::thread([&]()
-                        {
+        new std::thread([&](){
           panda_2_busy = true;
           auto current_object_2 = std::move(current_object);
           panda_2_success = executeTrajectory(pnp_2, current_object_2.collisionObject,active_tray);
@@ -177,7 +173,7 @@ void main_thread()
           {
             objs.push(current_object_2);
           }else{
-            RCLCPP_ERROR(LOGGER, "spawing new cube <------------------------------------>");
+            RCLCPP_INFO(LOGGER, "Robot 2 successful placing. Request to spawn a new cube ");
             auto message = std_msgs::msg::String();
             publisher_->publish(message);
           }
