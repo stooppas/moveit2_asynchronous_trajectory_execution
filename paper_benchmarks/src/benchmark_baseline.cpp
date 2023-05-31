@@ -10,10 +10,44 @@ int main(int argc, char** argv)
 
   pnp = std::make_shared<primitive_pick_and_place>(node,"panda_1");
 
+  publisher_ = node->create_publisher<std_msgs::msg::String>("spawnNewCube", 10);
+
+  new std::thread(update_planning_scene);
+
   new std::thread(main_thread);
 
   rclcpp::spin(node);
   rclcpp::shutdown();
+}
+
+void update_planning_scene()
+{
+
+  while (true)
+  {
+
+    objMap = pnp->getCollisionObjects();
+    colors = pnp->getCollisionObjectColors();
+    
+    for (auto &pair : objMap)
+    {
+      auto it = std::find(all_objects.begin(), all_objects.end(), pair.second.id);
+
+      // not found in the object list
+      if (it == all_objects.end())
+      {
+        all_objects.push_back(pair.second.id);
+
+        CollisionPlanningObject new_object(pair.second, 0, 0);
+        objs.push(new_object);
+
+        RCLCPP_INFO(LOGGER, "New object detected. id: %s", pair.second.id.c_str());
+      }
+    }
+
+    std::this_thread::sleep_for(1.0s);
+    update_scene_called_once = true;
+  }
 }
 
 void main_thread()
@@ -26,15 +60,12 @@ void main_thread()
 
   pnp->open_gripper();
 
-  auto objMap = pnp->getCollisionObjects();
+  while (!update_scene_called_once)
+  {
+    std::this_thread::sleep_for(1.0s);
+  }
 
-  std::vector<moveit_msgs::msg::CollisionObject> objs;
-  for(const auto &obj : objMap)objs.push_back(obj.second);
-  std::random_shuffle(objs.begin(),objs.end());
-
-  auto colors = pnp->getCollisionObjectColors();
-
-  RCLCPP_INFO(LOGGER,"Size: %i",objs.size());
+  RCLCPP_INFO(LOGGER,"Size: %li",objs.size());
 
   geometry_msgs::msg::Pose pose;
 
@@ -42,7 +73,9 @@ void main_thread()
   tray_helper red_tray(6,3,-0.425,-0.925,0.06,0.1,true);
   tray_helper* active_tray;
 
-  for(auto obj : objs){
+  while (!objs.empty())
+  {
+    auto obj = objs.pop("", "random").collisionObject;
     RCLCPP_INFO(LOGGER,"Object: %s",obj.id.c_str());
 
     //Check if the object is a box
@@ -147,6 +180,10 @@ void main_thread()
     active_tray->next();
     success = true;
     r.sleep();
+
+    //spawn two new cubes
+    auto message = std_msgs::msg::String();
+    publisher_->publish(message); 
   }
   
   RCLCPP_INFO(LOGGER,"Finished");
