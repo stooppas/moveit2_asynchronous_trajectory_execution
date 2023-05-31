@@ -30,9 +30,39 @@ std::vector<std::string> all_objects;
 Point3D e(0,0,0);
 ThreadSafeCubeQueue objs(e);
 
+struct arm_state{
+    const moveit::core::JointModelGroup* arm_joint_model_group;
+    const std::vector<std::string> &arm_joint_names;
+    std::vector<double> arm_joint_values;
+    geometry_msgs::msg::Pose pose; 
+    CollisionPlanningObject object;
+
+    arm_state(const moveit::core::JointModelGroup* jmg):
+    arm_joint_model_group(jmg), arm_joint_names(jmg->getVariableNames()){}
+};
+
+enum Movement{
+    PREGRASP,
+    GRASP,
+    PREMOVE,
+    MOVE,
+    PUTDOWN,
+    POSTMOVE
+};
+
+struct dual_arm_state{
+    arm_state arm_1;
+    arm_state arm_2;
+
+    dual_arm_state(arm_state a_1, arm_state a_2): arm_1(a_1),arm_2(a_2) {}
+};
 
 std::map<std::string, moveit_msgs::msg::CollisionObject> objMap;
 std::map<std::string, moveit_msgs::msg::ObjectColor> colors;
 bool update_scene_called_once = false;
+
+bool plan_and_move(dual_arm_state &arm_system, Movement movement, moveit::core::RobotStatePtr kinematic_state, 
+double timeout, moveit::planning_interface::MoveGroupInterface& dual_arm, tray_helper* active_tray_arm_1,
+tray_helper* active_tray_arm_2);
 
 #endif
