@@ -45,8 +45,6 @@ void Scene::add_objects_to_scene(int numObjects)
     {
       collision_objects.push_back(pair.second);
 
-      // std::cout << pair.second.id << std::endl;
-
       for (const auto &pair_color : current_colors)
       {
         if (pair.second.id == pair_color.second.id)
@@ -96,13 +94,13 @@ bool Scene::createNewObject(int counter, float min_x, float max_x, float max_y, 
   pose.position.y = min_y + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (max_y - min_y)));
   pose.position.z = 1.026;
   pose.orientation.z = static_cast<float>(rand()) / (static_cast<float>(RAND_MAX));
-  ;
 
   bool isColliding = false;
 
   for (auto objectS : collision_objects)
   {
-    double len = sqrt(pow(pose.position.x - objectS.primitive_poses[0].position.x, 2) + pow(pose.position.y - objectS.primitive_poses[0].position.y, 2));
+    //double len = sqrt(pow(pose.position.x - objectS.primitive_poses[0].position.x, 2) + pow(pose.position.y - objectS.primitive_poses[0].position.y, 2));
+    double len = sqrt(pow(pose.position.x - objectS.pose.position.x, 2) + pow(pose.position.y - objectS.pose.position.y, 2));
     if (len < 0.1)
     {
       isColliding = true;
@@ -142,7 +140,8 @@ bool Scene::createNewObject(int counter, float min_x, float max_x, float max_y, 
   }
 
   object.primitives.push_back(primitive);
-  object.primitive_poses.push_back(pose);
+  //object.primitive_poses.push_back(pose);
+  object.pose = pose;
   object.operation = object.ADD;
   collision_objects.push_back(object);
   object_colors.push_back(color);
