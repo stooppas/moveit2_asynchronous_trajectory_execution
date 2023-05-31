@@ -17,7 +17,7 @@ void update_planning_scene();
 
 rclcpp::Publisher<std_msgs::msg::String>::SharedPtr publisher_;
 std::vector<std::string> all_objects;
-Point3D e(0,0,0);
+Point3D e(0, 0, 0);
 ThreadSafeCubeQueue objs(e);
 
 std::map<std::string, moveit_msgs::msg::CollisionObject> objMap;

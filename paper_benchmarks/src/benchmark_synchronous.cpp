@@ -174,11 +174,11 @@ void main_thread()
     plan_and_move(arm_system, Movement::POSTMOVE, kinematic_state, 1, dual_arm,
                   active_tray_arm_1, active_tray_arm_2);
 
-    //spawn two new cubes
+    // spawn two new cubes
     auto message = std_msgs::msg::String();
-    publisher_->publish(message);   
+    publisher_->publish(message);
     std::this_thread::sleep_for(1.0s);
-    publisher_->publish(message);   
+    publisher_->publish(message);
   }
 }
 

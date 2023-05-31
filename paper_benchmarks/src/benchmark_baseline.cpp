@@ -2,13 +2,13 @@
 
 using namespace std::chrono_literals;
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
-  rclcpp::init(argc,argv);
+  rclcpp::init(argc, argv);
 
   node = std::make_shared<rclcpp::Node>("benchmark_baseline");
 
-  pnp = std::make_shared<primitive_pick_and_place>(node,"panda_1");
+  pnp = std::make_shared<primitive_pick_and_place>(node, "panda_1");
 
   publisher_ = node->create_publisher<std_msgs::msg::String>("spawnNewCube", 10);
 
@@ -28,7 +28,7 @@ void update_planning_scene()
 
     objMap = pnp->getCollisionObjects();
     colors = pnp->getCollisionObjectColors();
-    
+
     for (auto &pair : objMap)
     {
       auto it = std::find(all_objects.begin(), all_objects.end(), pair.second.id);
@@ -51,7 +51,7 @@ void update_planning_scene()
 }
 
 void main_thread()
-{ 
+{
   srand(time(0));
   rclcpp::Rate r(1);
   bool success = false;
@@ -65,31 +65,34 @@ void main_thread()
     std::this_thread::sleep_for(1.0s);
   }
 
-  RCLCPP_INFO(LOGGER,"Size: %li",objs.size());
+  RCLCPP_INFO(LOGGER, "Size: %li", objs.size());
 
   geometry_msgs::msg::Pose pose;
 
-  tray_helper blue_tray(6,3,0.11,-0.925,0.06,0.1,true);
-  tray_helper red_tray(6,3,-0.425,-0.925,0.06,0.1,true);
-  tray_helper* active_tray;
+  tray_helper blue_tray(6, 3, 0.11, -0.925, 0.06, 0.1, true);
+  tray_helper red_tray(6, 3, -0.425, -0.925, 0.06, 0.1, true);
+  tray_helper *active_tray;
 
   while (!objs.empty())
   {
     auto obj = objs.pop("", "random").collisionObject;
-    RCLCPP_INFO(LOGGER,"Object: %s",obj.id.c_str());
+    RCLCPP_INFO(LOGGER, "Object: %s", obj.id.c_str());
 
-    //Check if the object is a box
-    if(obj.id.rfind("box",0) != 0)
+    // Check if the object is a box
+    if (obj.id.rfind("box", 0) != 0)
     {
-      RCLCPP_INFO(LOGGER,"Skipping");
+      RCLCPP_INFO(LOGGER, "Skipping");
       continue;
     }
 
-    if(colors[obj.id].color.r == 1 && colors[obj.id].color.g == 0 && colors[obj.id].color.b == 0)active_tray = &red_tray;
-    else if(colors[obj.id].color.r == 0 && colors[obj.id].color.g == 0 && colors[obj.id].color.b == 1)active_tray = &blue_tray;
-    else continue;
+    if (colors[obj.id].color.r == 1 && colors[obj.id].color.g == 0 && colors[obj.id].color.b == 0)
+      active_tray = &red_tray;
+    else if (colors[obj.id].color.r == 0 && colors[obj.id].color.g == 0 && colors[obj.id].color.b == 1)
+      active_tray = &blue_tray;
+    else
+      continue;
 
-    //Pre Grasp
+    // Pre Grasp
     pose.position.x = obj.pose.position.x;
     pose.position.y = obj.pose.position.y;
     pose.position.z = obj.pose.position.z + 0.25;
@@ -101,20 +104,18 @@ void main_thread()
 
     tf2::Quaternion q_orig, q_rot, q_new;
 
-    tf2::convert(pose.orientation,q_orig);
+    tf2::convert(pose.orientation, q_orig);
 
     tf2::Matrix3x3 m(q_orig);
-    double roll,pitch,yaw;
-    m.getRPY(roll,pitch,yaw);
-
+    double roll, pitch, yaw;
+    m.getRPY(roll, pitch, yaw);
 
     int attempts = 1;
     float offset = 0;
 
-
-    while(!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
+    while (!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
     {
-      RCLCPP_INFO(LOGGER,"Retrying");
+      RCLCPP_INFO(LOGGER, "Retrying");
       /*
       offset = static_cast <float> (rand()) /( static_cast <float> (RAND_MAX/0.05)) - 0.025;
       pose.position.x = obj.pose.position.x + offset*sin(yaw);
@@ -133,24 +134,24 @@ void main_thread()
       */
     }
 
-    //Grasp
+    // Grasp
     pose.position.z = obj.pose.position.z + 0.1;
 
-    while(!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
+    while (!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
     {
-      RCLCPP_INFO(LOGGER,"Retrying");
+      RCLCPP_INFO(LOGGER, "Retrying");
     }
     pnp->grasp_object(obj);
 
-    //Pre Move
+    // Pre Move
     pose.position.z = obj.pose.position.z + 0.25;
 
-    while(!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
+    while (!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
     {
-      RCLCPP_INFO(LOGGER,"Retrying");
+      RCLCPP_INFO(LOGGER, "Retrying");
     }
 
-    //Move
+    // Move
     pose.position.x = active_tray->get_x();
     pose.position.y = active_tray->get_y();
     pose.position.z = 1.28 + active_tray->z * 0.05;
@@ -158,33 +159,33 @@ void main_thread()
     pose.orientation.x = 1;
     pose.orientation.y = 0;
 
-    while(!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
+    while (!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
     {
-      RCLCPP_INFO(LOGGER,"Retrying");
+      RCLCPP_INFO(LOGGER, "Retrying");
     }
     // Put down
     pose.position.z = 1.141 + active_tray->z * 0.05;
 
-    while(!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
+    while (!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
     {
-      RCLCPP_INFO(LOGGER,"Retrying");
+      RCLCPP_INFO(LOGGER, "Retrying");
     }
     pnp->release_object(obj);
-    //Post Move
-    pose.position.z = 1.28 + active_tray->z * 0.05; 
+    // Post Move
+    pose.position.z = 1.28 + active_tray->z * 0.05;
 
-    while(!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
+    while (!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
     {
-      RCLCPP_INFO(LOGGER,"Retrying");
+      RCLCPP_INFO(LOGGER, "Retrying");
     }
     active_tray->next();
     success = true;
     r.sleep();
 
-    //spawn two new cubes
+    // spawn two new cubes
     auto message = std_msgs::msg::String();
-    publisher_->publish(message); 
+    publisher_->publish(message);
   }
-  
-  RCLCPP_INFO(LOGGER,"Finished");
+
+  RCLCPP_INFO(LOGGER, "Finished");
 }
