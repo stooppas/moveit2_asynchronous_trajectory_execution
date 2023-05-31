@@ -59,7 +59,8 @@ private:
     }
 
 public:
-    explicit ThreadSafeCubeQueue(const Point3D &p) : point(p) {
+    explicit ThreadSafeCubeQueue(const Point3D &p) : point(p)
+    {
         std::srand(static_cast<unsigned int>(std::time(0)));
     }
 
@@ -90,18 +91,18 @@ public:
     CollisionPlanningObject pop(std::string robot_planning, std::string s)
     {
         int result = s.compare("random");
-        if(result == 0){
+        if (result == 0)
+        {
             std::lock_guard<std::mutex> lock(mutex);
-            // Generate a random number
-            
-            int randomNum = std::rand() % (priority_queue.size() );
-            std::cout << "Generating random "  << randomNum << " " << priority_queue.size() << std::endl;
+            int randomNum = std::rand() % (priority_queue.size());
+            std::cout << "Generating random " << randomNum << " " << priority_queue.size() << std::endl;
             CollisionPlanningObject minObject = priority_queue[randomNum];
-            priority_queue.erase(priority_queue.begin() + randomNum );
+            priority_queue.erase(priority_queue.begin() + randomNum);
             return minObject;
         }
-        //empty case for baseline synchronous planning.
-        if(robot_planning.empty()){
+        // empty case for baseline synchronous planning.
+        if (robot_planning.empty())
+        {
             std::lock_guard<std::mutex> lock(mutex);
             size_t current_index = 0;
             float minDistance = std::numeric_limits<float>::max();

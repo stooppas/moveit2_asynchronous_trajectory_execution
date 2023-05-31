@@ -44,7 +44,7 @@ void update_planning_scene()
         all_objects.push_back(pair.second.id);
 
         CollisionPlanningObject new_object(pair.second, 0, 0);
-        objs.push( new_object);
+        objs.push(new_object);
 
         RCLCPP_INFO(LOGGER, "New object detected. id: %s", pair.second.id.c_str());
       }
@@ -100,7 +100,6 @@ void main_thread()
 
       objs.updatePoint(e);
       current_object = objs.pop(curren_planning_robot, "");
-      
 
       auto object_id = current_object.collisionObject.id;
       RCLCPP_INFO(LOGGER, "Object: %s", object_id.c_str());
@@ -125,7 +124,8 @@ void main_thread()
         else
           continue;
 
-        new std::thread([&](){
+        new std::thread([&]()
+                        {
           panda_1_busy = true;
           auto current_object_1 = std::move(current_object);
           bool panda_1_success = executeTrajectory(pnp_1, current_object_1.collisionObject,active_tray);
@@ -138,8 +138,7 @@ void main_thread()
             auto message = std_msgs::msg::String();
             publisher_->publish(message);
           }
-          panda_1_busy = false; 
-          });
+          panda_1_busy = false; });
         std::this_thread::sleep_for(0.2s);
       }
 
@@ -153,7 +152,8 @@ void main_thread()
           active_tray = &blue_tray_2;
         else
           continue;
-        new std::thread([&](){
+        new std::thread([&]()
+                        {
           panda_2_busy = true;
           auto current_object_2 = std::move(current_object);
           panda_2_success = executeTrajectory(pnp_2, current_object_2.collisionObject,active_tray);
