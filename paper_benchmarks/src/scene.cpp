@@ -41,7 +41,7 @@ void Scene::add_objects_to_scene(int numObjects){
     if(pair.second.id.find("box_") != std::string::npos){
       collision_objects.push_back(pair.second);
 
-      std::cout << pair.second.id << std::endl;
+      //std::cout << pair.second.id << std::endl;
       
       for (const auto& pair_color : current_colors) {
         if(pair.second.id == pair_color.second.id){

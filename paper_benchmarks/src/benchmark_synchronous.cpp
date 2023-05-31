@@ -14,7 +14,7 @@ int main(int argc, char **argv)
   pnp_2 = std::make_shared<primitive_pick_and_place>(node, "panda_2");
   pnp_dual = std::make_shared<primitive_pick_and_place>(node, "dual_arm");
 
-  // publisher_ = node->create_publisher<std_msgs::msg::String>("spawnNewCube", 10);
+  publisher_ = node->create_publisher<std_msgs::msg::String>("spawnNewCube", 10);
 
   new std::thread(update_planning_scene);
 
@@ -173,6 +173,12 @@ void main_thread()
 
     plan_and_move(arm_system, Movement::POSTMOVE, kinematic_state, 1, dual_arm,
                   active_tray_arm_1, active_tray_arm_2);
+
+    //spawn two new cubes
+    auto message = std_msgs::msg::String();
+    publisher_->publish(message);   
+    std::this_thread::sleep_for(1.0s);
+    publisher_->publish(message);   
   }
 }
 
