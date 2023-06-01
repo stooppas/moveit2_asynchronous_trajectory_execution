@@ -36,7 +36,7 @@ void Scene::add_objects_to_scene(int numObjects)
   std::map<std::string, moveit_msgs::msg::CollisionObject> current_objects = planning_interface->getObjects();
   std::map<std::string, moveit_msgs::msg::ObjectColor> current_colors = planning_interface->getObjectColors();
 
-  srand(time(0));
+  srand(0);
 
   // filter the cube type objects and update the collision_objects
   for (const auto &pair : current_objects)
@@ -101,7 +101,7 @@ bool Scene::createNewObject(int counter, float min_x, float max_x, float max_y, 
   {
     //double len = sqrt(pow(pose.position.x - objectS.primitive_poses[0].position.x, 2) + pow(pose.position.y - objectS.primitive_poses[0].position.y, 2));
     double len = sqrt(pow(pose.position.x - objectS.pose.position.x, 2) + pow(pose.position.y - objectS.pose.position.y, 2));
-    if (len < 0.1)
+    if (len < 0.07)
     {
       isColliding = true;
       break;

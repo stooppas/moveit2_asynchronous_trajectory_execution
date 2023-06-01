@@ -14,7 +14,8 @@ def generate_launch_description():
         executable="benchmark_asynchronous",
         output="screen",
         parameters=[
-            moveit_config.to_dict()
+            moveit_config.to_dict(),
+            {"launchType" : "euclideanDistance"}
         ],
     )
 

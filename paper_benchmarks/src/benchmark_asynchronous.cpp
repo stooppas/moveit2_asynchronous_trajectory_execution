@@ -1,6 +1,7 @@
 #include "paper_benchmarks/benchmark_asynchronous.hpp"
 #include <thread>
 #include <iostream>
+#include <string>
 #include "std_msgs/msg/string.hpp"
 #include "paper_benchmarks/cube_selector.hpp"
 
@@ -11,6 +12,13 @@ int main(int argc, char **argv)
   rclcpp::init(argc, argv);
 
   node = std::make_shared<rclcpp::Node>("benchmark_asynchronous");
+
+  node->declare_parameter("launchType", "randomDistance");
+  
+
+  std::string distanceType = node->get_parameter("launchType").as_string();
+
+  RCLCPP_INFO(LOGGER, "launch: %s", distanceType.c_str());
 
   pnp_1 = std::make_shared<primitive_pick_and_place>(node, "panda_1");
   pnp_2 = std::make_shared<primitive_pick_and_place>(node, "panda_2");
@@ -178,6 +186,11 @@ void main_thread()
 
 bool executeTrajectory(std::shared_ptr<primitive_pick_and_place> pnp, moveit_msgs::msg::CollisionObject &object, tray_helper *tray)
 {
+  static int thread_local pregrasp_planning_retries = 0;
+  static int thread_local pregrasp_executing_retries = 0;
+  static int thread_local grasp_planning_retries = 0;
+  static int thread_local grasp_executing_retries = 0;
+
   RCLCPP_INFO(LOGGER, "Start execution of Object: %s", object.id.c_str());
   geometry_msgs::msg::Pose pose;
   pnp->open_gripper();
@@ -199,8 +212,31 @@ bool executeTrajectory(std::shared_ptr<primitive_pick_and_place> pnp, moveit_msg
     RCLCPP_INFO(LOGGER, "Try again pre grasp failed");
     if (!pnp->is_plan_successful())
     {
-      RCLCPP_ERROR(LOGGER, "Pre grasp Planner failed");
-      return false;
+      RCLCPP_ERROR(LOGGER, "Pre grasp planner failed");
+      if(pregrasp_planning_retries >= 2)
+      {
+        pregrasp_planning_retries = 0;
+        return false;
+      }
+      else
+      {
+        pregrasp_planning_retries++;
+        RCLCPP_ERROR(LOGGER, "Retrying pregrasp planning");
+      }
+    }
+    if(!pnp->is_execution_successful())
+    {
+      RCLCPP_ERROR(LOGGER, "Pre grasp execution failed");
+      if(pregrasp_executing_retries >= 2)
+      {
+        pregrasp_executing_retries = 0;
+        return false;
+      }
+      else
+      {
+        pregrasp_executing_retries++;
+        RCLCPP_ERROR(LOGGER, "Retrying pregrasp execution");
+      }
     }
   }
   // Grasp
@@ -211,10 +247,34 @@ bool executeTrajectory(std::shared_ptr<primitive_pick_and_place> pnp, moveit_msg
     RCLCPP_INFO(LOGGER, "Try again grasp failed");
     if (!pnp->is_plan_successful())
     {
-      RCLCPP_ERROR(LOGGER, "Pre Grasp Planner failed");
-      return false;
+      RCLCPP_ERROR(LOGGER, "Grasp planner failed");
+      if(grasp_planning_retries >= 2)
+      {
+        grasp_planning_retries = 0;
+        return false;
+      }
+      else
+      {
+        grasp_planning_retries++;
+        RCLCPP_ERROR(LOGGER, "Retrying grasp planning");
+      }
+    }
+    if(!pnp->is_execution_successful())
+    {
+      RCLCPP_ERROR(LOGGER, "Grasp execution failed");
+      if(grasp_executing_retries >= 2)
+      {
+        grasp_executing_retries = 0;
+        return false;
+      }
+      else
+      {
+        grasp_executing_retries++;
+        RCLCPP_ERROR(LOGGER, "Retrying grasp executing");
+      }
     }
   }
+  
   pnp->grasp_object(object);
   RCLCPP_INFO(LOGGER, "Grasping object with ID %s", object.id.c_str());
 

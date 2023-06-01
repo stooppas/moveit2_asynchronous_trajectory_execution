@@ -177,7 +177,7 @@ void main_thread()
     // spawn two new cubes
     auto message = std_msgs::msg::String();
     publisher_->publish(message);
-    std::this_thread::sleep_for(1.0s);
+    //std::this_thread::sleep_for(1.0s);
     publisher_->publish(message);
   }
 }

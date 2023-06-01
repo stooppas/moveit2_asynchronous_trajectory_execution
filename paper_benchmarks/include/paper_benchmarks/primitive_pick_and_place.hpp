@@ -80,6 +80,7 @@ public:
     std::vector<double> get_joint_values();
     bool generate_plan();
     bool is_plan_successful();
+    bool is_execution_successful();
     bool execute();
     bool plan_and_execute();
     bool open_gripper();
@@ -107,6 +108,7 @@ private:
     int counter = 0;
     moveit_msgs::msg::CollisionObject active_object;
     bool plan_success = false;
+    bool execution_success = false;
 };
 
 #endif

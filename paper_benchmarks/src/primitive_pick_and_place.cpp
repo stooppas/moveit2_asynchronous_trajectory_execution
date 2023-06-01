@@ -124,10 +124,16 @@ bool primitive_pick_and_place::execute()
 
 bool primitive_pick_and_place::plan_and_execute()
 {
-    return move_group_interface->move() == moveit::core::MoveItErrorCode::SUCCESS;
+    execution_success = move_group_interface->move() == moveit::core::MoveItErrorCode::SUCCESS;
+    return execution_success;
 }
 
 bool primitive_pick_and_place::is_plan_successful()
+{
+    return plan_success;
+}
+
+bool primitive_pick_and_place::is_execution_successful()
 {
     return plan_success;
 }
