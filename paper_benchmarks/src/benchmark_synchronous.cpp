@@ -4,11 +4,32 @@
 
 using namespace std::chrono_literals;
 
+int number_of_test_cases = 5;
+
+static struct runner{
+  int counter = 1;
+  std::mutex mtx;
+
+  void increment(){
+    std::lock_guard<std::mutex> lock(mtx);
+    counter++;
+  }
+
+  int check(){
+    std::lock_guard<std::mutex> lock(mtx);
+    return counter;
+  }
+} runner1;
+
 int main(int argc, char **argv)
 {
   rclcpp::init(argc, argv);
 
   node = std::make_shared<rclcpp::Node>("benchmark_baseline");
+
+  node->declare_parameter("cubesToPick", 5);
+
+  number_of_test_cases = node->get_parameter("cubesToPick").as_int();
 
   pnp_1 = std::make_shared<primitive_pick_and_place>(node, "panda_1");
   pnp_2 = std::make_shared<primitive_pick_and_place>(node, "panda_2");
@@ -176,6 +197,16 @@ void main_thread()
 
     // spawn two new cubes
     auto message = std_msgs::msg::String();
+
+    if(runner1.check() > number_of_test_cases){
+      RCLCPP_INFO(LOGGER, "[terminate]");
+    }else{
+      runner1.increment();
+      runner1.increment();
+      RCLCPP_INFO(LOGGER, "[checkpoint] Robot 1 successful placing. Request to spawn a new cube ");
+      RCLCPP_INFO(LOGGER, "[checkpoint] Robot 2 successful placing. Request to spawn a new cube ");
+    }
+
     publisher_->publish(message);
     //std::this_thread::sleep_for(1.0s);
     publisher_->publish(message);

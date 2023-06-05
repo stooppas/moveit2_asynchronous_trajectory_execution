@@ -2,11 +2,32 @@
 
 using namespace std::chrono_literals;
 
+int number_of_test_cases = 5;
+
+static struct runner{
+  int counter = 1;
+  std::mutex mtx;
+
+  void increment(){
+    std::lock_guard<std::mutex> lock(mtx);
+    counter++;
+  }
+
+  int check(){
+    std::lock_guard<std::mutex> lock(mtx);
+    return counter;
+  }
+} runner1;
+
 int main(int argc, char **argv)
 {
   rclcpp::init(argc, argv);
 
   node = std::make_shared<rclcpp::Node>("benchmark_baseline");
+
+  node->declare_parameter("cubesToPick", 5);
+
+  number_of_test_cases = node->get_parameter("cubesToPick").as_int();
 
   pnp = std::make_shared<primitive_pick_and_place>(node, "panda_1");
 
@@ -72,6 +93,8 @@ void main_thread()
   tray_helper blue_tray(6, 3, 0.11, -0.925, 0.06, 0.1, true);
   tray_helper red_tray(6, 3, -0.425, -0.925, 0.06, 0.1, true);
   tray_helper *active_tray;
+
+  RCLCPP_INFO(LOGGER, "[checkpoint] Starting the baseline processing with %i cubes", number_of_test_cases);
 
   while (!objs.empty())
   {
@@ -181,6 +204,13 @@ void main_thread()
     active_tray->next();
     success = true;
     r.sleep();
+
+    if(runner1.check() > number_of_test_cases){
+      RCLCPP_INFO(LOGGER, "[terminate]");
+    }else{
+      runner1.increment();
+      RCLCPP_INFO(LOGGER, "[checkpoint] Robot successful placing. Request to spawn a new cube ");
+    }
 
     // spawn two new cubes
     auto message = std_msgs::msg::String();

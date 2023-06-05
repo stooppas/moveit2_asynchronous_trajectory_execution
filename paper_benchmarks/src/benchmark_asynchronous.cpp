@@ -7,6 +7,23 @@
 
 using namespace std::chrono_literals;
 
+int number_of_test_cases = 5;
+
+static struct runner{
+  int counter = 1;
+  std::mutex mtx;
+
+  void increment(){
+    std::lock_guard<std::mutex> lock(mtx);
+    counter++;
+  }
+
+  int check(){
+    std::lock_guard<std::mutex> lock(mtx);
+    return counter;
+  }
+} runner1;
+
 int main(int argc, char **argv)
 {
   rclcpp::init(argc, argv);
@@ -14,9 +31,11 @@ int main(int argc, char **argv)
   node = std::make_shared<rclcpp::Node>("benchmark_asynchronous");
 
   node->declare_parameter("launchType", "randomDistance");
-  
+  node->declare_parameter("cubesToPick", 5);
 
   std::string distanceType = node->get_parameter("launchType").as_string();
+  
+  number_of_test_cases = node->get_parameter("cubesToPick").as_int();
 
   RCLCPP_INFO(LOGGER, "launch: %s", distanceType.c_str());
 
@@ -79,7 +98,7 @@ void main_thread()
 
   int i = 0;
 
-  RCLCPP_INFO(LOGGER, "[checkpoint]");
+  RCLCPP_INFO(LOGGER, "[checkpoint] Starting execution");
 
   while (!objs.empty())
   {
@@ -107,7 +126,7 @@ void main_thread()
       }
 
       objs.updatePoint(e);
-      current_object = objs.pop(curren_planning_robot, "");
+      current_object = objs.pop(curren_planning_robot, "random");
 
       auto object_id = current_object.collisionObject.id;
       RCLCPP_INFO(LOGGER, "Object: %s", object_id.c_str());
@@ -142,7 +161,12 @@ void main_thread()
           {
             objs.push(current_object_1);
           }else{
-            RCLCPP_INFO(LOGGER, "Robot 1 successful placing. Request to spawn a new cube ");
+            if(runner1.check() > number_of_test_cases){
+              RCLCPP_INFO(LOGGER, "[terminate]");
+            }else{
+              runner1.increment();
+              RCLCPP_INFO(LOGGER, "[checkpoint] Robot 1 successful placing. Request to spawn a new cube ");
+            }
             auto message = std_msgs::msg::String();
             publisher_->publish(message);
           }
@@ -170,7 +194,12 @@ void main_thread()
           {
             objs.push(current_object_2);
           }else{
-            RCLCPP_INFO(LOGGER, "Robot 2 successful placing. Request to spawn a new cube ");
+            if(runner1.check() > number_of_test_cases){
+              RCLCPP_INFO(LOGGER, "[terminate]");
+            }else{
+              runner1.increment();
+              RCLCPP_INFO(LOGGER, "[checkpoint] Robot 2 successful placing. Request to spawn a new cube ");
+            }
             auto message = std_msgs::msg::String();
             publisher_->publish(message);
           }
