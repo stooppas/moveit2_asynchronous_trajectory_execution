@@ -171,7 +171,7 @@ void main_thread()
             publisher_->publish(message);
           }
           panda_1_busy = false; });
-        std::this_thread::sleep_for(0.2s);
+        std::this_thread::sleep_for(0.1s);
       }
 
       // plan for if the arm one is not busy
@@ -204,7 +204,7 @@ void main_thread()
             publisher_->publish(message);
           }
           panda_2_busy = false; });
-        std::this_thread::sleep_for(0.2s);
+        std::this_thread::sleep_for(0.1s);
       }
     }
     r.sleep();
@@ -268,6 +268,9 @@ bool executeTrajectory(std::shared_ptr<primitive_pick_and_place> pnp, moveit_msg
       }
     }
   }
+
+  pnp->set_default();
+  
   // Grasp
   pose.position.z = object.pose.position.z + 0.1;
 
@@ -303,6 +306,8 @@ bool executeTrajectory(std::shared_ptr<primitive_pick_and_place> pnp, moveit_msg
       }
     }
   }
+
+  pnp->set_default();
   
   pnp->grasp_object(object);
   RCLCPP_INFO(LOGGER, "Grasping object with ID %s", object.id.c_str());
@@ -315,6 +320,14 @@ bool executeTrajectory(std::shared_ptr<primitive_pick_and_place> pnp, moveit_msg
   while (!(pnp->set_joint_values_from_pose(pose) && pnp->generate_plan() && pnp->execute()))
   {
     RCLCPP_INFO(LOGGER, "Try again pre move failed");
+    if (!pnp->is_plan_successful())
+    {
+      RCLCPP_INFO(LOGGER, "Pre move planning failed +++++");
+    }
+    if(!pnp->is_execution_successful())
+    {
+      RCLCPP_INFO(LOGGER, "Pre move execution failed ------"); 
+    }
   }
 
   // Move

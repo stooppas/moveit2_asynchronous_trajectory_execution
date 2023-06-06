@@ -90,6 +90,7 @@ public:
     std::map<std::string, moveit_msgs::msg::CollisionObject> getCollisionObjects();
     std::map<std::string, moveit_msgs::msg::ObjectColor> getCollisionObjectColors();
     bool home();
+    void set_default();
 
 private:
     std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> planning_interface;

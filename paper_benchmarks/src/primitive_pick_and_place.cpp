@@ -94,7 +94,7 @@ bool primitive_pick_and_place::set_joint_values_from_pose(geometry_msgs::msg::Po
 
     if (!found_ik)
     {
-        RCLCPP_ERROR(node->get_logger(), "Did not find IK solution");
+        RCLCPP_ERROR(node->get_logger(), "[terminate] Did not find IK solution");
         return false;
     }
 
@@ -119,7 +119,8 @@ bool primitive_pick_and_place::generate_plan()
 
 bool primitive_pick_and_place::execute()
 {
-    return move_group_interface->execute(plan, rclcpp::Duration::from_seconds(10)) == moveit::core::MoveItErrorCode::SUCCESS;
+    execution_success = move_group_interface->execute(plan, rclcpp::Duration::from_seconds(20)) == moveit::core::MoveItErrorCode::SUCCESS;
+    return execution_success;
 }
 
 bool primitive_pick_and_place::plan_and_execute()
@@ -135,5 +136,11 @@ bool primitive_pick_and_place::is_plan_successful()
 
 bool primitive_pick_and_place::is_execution_successful()
 {
-    return plan_success;
+    return execution_success;
+}
+
+
+void primitive_pick_and_place::set_default(){
+    plan_success = false;
+    execution_success = false;
 }

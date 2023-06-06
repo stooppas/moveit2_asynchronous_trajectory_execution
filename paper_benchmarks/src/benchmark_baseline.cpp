@@ -96,6 +96,9 @@ void main_thread()
 
   RCLCPP_INFO(LOGGER, "[checkpoint] Starting the baseline processing with %i cubes", number_of_test_cases);
 
+  int pregrasp_executing_retries = 0;
+  int grasp_executing_retries = 0;
+
   while (!objs.empty())
   {
     auto obj = objs.pop("", "random").collisionObject;
@@ -136,34 +139,63 @@ void main_thread()
     int attempts = 1;
     float offset = 0;
 
+    bool failed = false;
+
     while (!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
     {
-      RCLCPP_INFO(LOGGER, "Retrying");
-      /*
-      offset = static_cast <float> (rand()) /( static_cast <float> (RAND_MAX/0.05)) - 0.025;
-      pose.position.x = obj.pose.position.x + offset*sin(yaw);
-      pose.position.y = obj.pose.position.y + offset*cos(yaw);
-      //Rotate Gripper
-      /*
-      tf2::Quaternion q_orig, q_rot, q_new;
-
-      tf2::convert(pose.orientation,q_orig);
-
-      q_rot.setRPY(0,0,(attempts++%4) *1.57079633);
-
-      q_new = q_rot*q_orig;
-      q_new.normalize();
-      tf2::convert(q_new,pose.orientation);
-      */
+      RCLCPP_INFO(LOGGER, "Try again pre grasp failed");
+      if(!pnp->is_execution_successful())
+      {
+        RCLCPP_ERROR(LOGGER, "Pre grasp execution failed");
+        if(pregrasp_executing_retries >= 2)
+        {
+          pregrasp_executing_retries = 0;
+          grasp_executing_retries = 0;
+          failed = true;
+          break;
+        }
+        else
+        {
+          pregrasp_executing_retries++;
+          RCLCPP_ERROR(LOGGER, "Retrying pregrasp execution");
+        }
+      }
     }
+
+    if (failed){
+      continue;
+    }
+
+    pnp->set_default();
 
     // Grasp
     pose.position.z = obj.pose.position.z + 0.1;
 
     while (!(pnp->set_joint_values_from_pose(pose) && pnp->plan_and_execute()))
     {
-      RCLCPP_INFO(LOGGER, "Retrying");
+      RCLCPP_INFO(LOGGER, "Try again grasp failed");
+      if(!pnp->is_execution_successful())
+      {
+        RCLCPP_ERROR(LOGGER, "Grasp execution failed");
+        if(grasp_executing_retries >= 2)
+        {
+          pregrasp_executing_retries = 0;
+          grasp_executing_retries = 0;
+          failed = true;
+          break;
+        }
+        else
+        {
+          grasp_executing_retries++;
+          RCLCPP_ERROR(LOGGER, "Retrying grasp execution");
+        }
+      }
     }
+
+    if (failed){
+      continue;
+    }
+
     pnp->grasp_object(obj);
 
     // Pre Move

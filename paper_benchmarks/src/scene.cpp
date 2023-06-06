@@ -14,6 +14,7 @@ Scene::Scene(rclcpp::Node::SharedPtr node)
   {
     rclcpp::sleep_for(std::chrono::milliseconds(500));
   }
+  srand(0);
 }
 
 void Scene::create_random_scene()
@@ -36,7 +37,7 @@ void Scene::add_objects_to_scene(int numObjects)
   std::map<std::string, moveit_msgs::msg::CollisionObject> current_objects = planning_interface->getObjects();
   std::map<std::string, moveit_msgs::msg::ObjectColor> current_colors = planning_interface->getObjectColors();
 
-  srand(0);
+  
 
   // filter the cube type objects and update the collision_objects
   for (const auto &pair : current_objects)
