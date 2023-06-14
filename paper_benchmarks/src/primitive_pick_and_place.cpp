@@ -9,6 +9,7 @@ primitive_pick_and_place::primitive_pick_and_place(rclcpp::Node::SharedPtr node,
     move_group_interface->setMaxVelocityScalingFactor(1.0);
     move_group_interface->setMaxAccelerationScalingFactor(1.0);
     move_group_interface->setNumPlanningAttempts(5);
+    move_group_interface->setPlanningTime(1);
 
     planning_interface = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();
 
@@ -119,7 +120,7 @@ bool primitive_pick_and_place::generate_plan()
 
 bool primitive_pick_and_place::execute()
 {
-    execution_success = move_group_interface->execute(plan, rclcpp::Duration::from_seconds(20)) == moveit::core::MoveItErrorCode::SUCCESS;
+    execution_success = move_group_interface->execute(plan, rclcpp::Duration::from_seconds(10)) == moveit::core::MoveItErrorCode::SUCCESS;
     return execution_success;
 }
 

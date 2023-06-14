@@ -90,8 +90,8 @@ void main_thread()
 
   geometry_msgs::msg::Pose pose;
 
-  tray_helper blue_tray(6, 3, 0.11, -0.925, 0.06, 0.1, true);
-  tray_helper red_tray(6, 3, -0.425, -0.925, 0.06, 0.1, true);
+  tray_helper blue_tray(5, 2, 0.11, -0.925, 0.06, 0.1, true); // 6, 3
+  tray_helper red_tray(5, 2, -0.425, -0.925, 0.06, 0.1, true); // 6, 3
   tray_helper *active_tray;
 
   RCLCPP_INFO(LOGGER, "[checkpoint] Starting the baseline processing with %i cubes", number_of_test_cases);
@@ -101,8 +101,9 @@ void main_thread()
 
   while (!objs.empty())
   {
-    auto obj = objs.pop("", "random").collisionObject;
-    RCLCPP_INFO(LOGGER, "Object: %s", obj.id.c_str());
+    auto obj_d = objs.pop("", "random");
+    auto obj = obj_d.collisionObject;
+    RCLCPP_INFO(LOGGER, "Object: %s ", obj.id.c_str());
 
     // Check if the object is a box
     if (obj.id.rfind("box", 0) != 0)
@@ -111,10 +112,14 @@ void main_thread()
       continue;
     }
 
-    if (colors[obj.id].color.r == 1 && colors[obj.id].color.g == 0 && colors[obj.id].color.b == 0)
+    if (colors[obj.id].color.r == 1 && colors[obj.id].color.g == 0 && colors[obj.id].color.b == 0){
       active_tray = &red_tray;
-    else if (colors[obj.id].color.r == 0 && colors[obj.id].color.g == 0 && colors[obj.id].color.b == 1)
+      RCLCPP_INFO(LOGGER, "color red");
+    }
+    else if (colors[obj.id].color.r == 0 && colors[obj.id].color.g == 0 && colors[obj.id].color.b == 1){
       active_tray = &blue_tray;
+      RCLCPP_INFO(LOGGER, "color blue");
+    }
     else
       continue;
 
@@ -162,7 +167,9 @@ void main_thread()
       }
     }
 
-    if (failed){
+    if (failed)
+    {
+      objs.push(obj_d);
       continue;
     }
 
@@ -192,7 +199,9 @@ void main_thread()
       }
     }
 
-    if (failed){
+    if (failed)
+    {
+      objs.push(obj_d);
       continue;
     }
 

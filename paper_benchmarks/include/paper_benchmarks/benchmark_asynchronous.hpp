@@ -37,4 +37,6 @@ std::map<std::string, moveit_msgs::msg::CollisionObject> objMap;
 std::map<std::string, moveit_msgs::msg::ObjectColor> colors;
 bool update_scene_called_once = false;
 
+void planning_thread();
+
 #endif

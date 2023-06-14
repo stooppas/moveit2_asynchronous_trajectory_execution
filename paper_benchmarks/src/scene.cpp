@@ -102,7 +102,7 @@ bool Scene::createNewObject(int counter, float min_x, float max_x, float max_y, 
   {
     //double len = sqrt(pow(pose.position.x - objectS.primitive_poses[0].position.x, 2) + pow(pose.position.y - objectS.primitive_poses[0].position.y, 2));
     double len = sqrt(pow(pose.position.x - objectS.pose.position.x, 2) + pow(pose.position.y - objectS.pose.position.y, 2));
-    if (len < 0.07)
+    if (len < 0.10)
     {
       isColliding = true;
       break;
