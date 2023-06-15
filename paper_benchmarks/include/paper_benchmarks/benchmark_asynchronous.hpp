@@ -39,4 +39,21 @@ bool update_scene_called_once = false;
 
 void planning_thread();
 
+struct arm_state
+{
+    const moveit::core::JointModelGroup *arm_joint_model_group;
+    const std::vector<std::string> &arm_joint_names;
+    std::vector<double> arm_joint_values;
+    geometry_msgs::msg::Pose pose;
+    CollisionPlanningObject object;
+
+    arm_state(const moveit::core::JointModelGroup *jmg) : arm_joint_model_group(jmg), arm_joint_names(jmg->getVariableNames()) {}
+};
+bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interface::MoveGroupInterface &panda_1_arm,  
+  moveit::core::RobotModelConstPtr kinematic_model, moveit::core::RobotStatePtr kinematic_state, 
+  moveit_msgs::msg::CollisionObject &object, tray_helper *tray, int s);
+
+void main_thread_arm(std::shared_ptr<primitive_pick_and_place> pnp, std::string robot_arm);
+
+
 #endif

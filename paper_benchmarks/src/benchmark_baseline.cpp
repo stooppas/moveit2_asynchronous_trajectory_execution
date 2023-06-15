@@ -101,7 +101,7 @@ void main_thread()
 
   while (!objs.empty())
   {
-    auto obj_d = objs.pop("", "random");
+    auto obj_d = objs.pop("", "random", e);
     auto obj = obj_d.collisionObject;
     RCLCPP_INFO(LOGGER, "Object: %s ", obj.id.c_str());
 

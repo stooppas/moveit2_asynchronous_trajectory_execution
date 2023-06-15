@@ -84,11 +84,11 @@ public:
 
     void updatePoint(const Point3D &p)
     {
-        std::lock_guard<std::mutex> lock(mutex);
+        //std::lock_guard<std::mutex> lock(mutex);
         point = p;
     }
 
-    CollisionPlanningObject pop(std::string robot_planning, std::string s)
+    CollisionPlanningObject pop(std::string robot_planning, std::string s, const Point3D &p)
     {
         int result = s.compare("random");
         if (result == 0)
@@ -104,6 +104,7 @@ public:
         if (robot_planning.empty())
         {
             std::lock_guard<std::mutex> lock(mutex);
+            updatePoint(p);
             size_t current_index = 0;
             float minDistance = std::numeric_limits<float>::max();
 
@@ -123,6 +124,7 @@ public:
         }
 
         std::lock_guard<std::mutex> lock(mutex);
+        updatePoint(p);
         size_t current_index = 0;
         float minDistance = std::numeric_limits<float>::max();
 

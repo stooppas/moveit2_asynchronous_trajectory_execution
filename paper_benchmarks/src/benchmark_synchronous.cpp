@@ -25,7 +25,7 @@ int main(int argc, char **argv)
 {
   rclcpp::init(argc, argv);
 
-  node = std::make_shared<rclcpp::Node>("benchmark_baseline");
+  node = std::make_shared<rclcpp::Node>("benchmark_synchronous");
 
   node->declare_parameter("cubesToPick", 5);
 
@@ -141,14 +141,14 @@ void main_thread()
     e.y = -0.5;
     e.z = 1;
 
-    objs.updatePoint(e);
-    arm_system.arm_1.object = objs.pop("robot_1", "");
+    //objs.updatePoint(e);
+    arm_system.arm_1.object = objs.pop("robot_1", "", e);
     
     e.x = 0;
     e.y = 0.5;
     e.z = 1;  
-    objs.updatePoint(e);
-    arm_system.arm_2.object = objs.pop("robot_2", "");
+    //objs.updatePoint(e);
+    arm_system.arm_2.object = objs.pop("robot_2", "", e);
 
 
     RCLCPP_INFO(LOGGER, "[object id %s ]", arm_system.arm_1.object.collisionObject.id.c_str());

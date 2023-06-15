@@ -6,8 +6,8 @@ primitive_pick_and_place::primitive_pick_and_place(rclcpp::Node::SharedPtr node,
     this->node = node;
     this->timeout_duration = timeout_duration;
     move_group_interface = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node, move_group);
-    move_group_interface->setMaxVelocityScalingFactor(1.0);
-    move_group_interface->setMaxAccelerationScalingFactor(1.0);
+    move_group_interface->setMaxVelocityScalingFactor(0.50);
+    move_group_interface->setMaxAccelerationScalingFactor(0.50);
     move_group_interface->setNumPlanningAttempts(5);
     move_group_interface->setPlanningTime(1);
 
