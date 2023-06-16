@@ -7,7 +7,7 @@ using namespace std::chrono_literals;
 int number_of_test_cases = 5;
 
 static struct runner{
-  int counter = 1;
+  int counter = 0;
   std::mutex mtx;
 
   void increment(){
@@ -70,14 +70,6 @@ void update_planning_scene()
       }
     }
 
-    if(objs.size() < 4)
-    {
-      auto message = std_msgs::msg::String();
-      for(int i = 0; i < 4; i++){
-        publisher_->publish(message);
-      }
-    }
-
     std::this_thread::sleep_for(1.0s);
     update_scene_called_once = true;
 
@@ -130,54 +122,92 @@ void main_thread()
 
   RCLCPP_INFO(LOGGER, "Finished");
 
+  int counter = 0;
+
   while (!objs.empty())
   {
+    counter++;
     RCLCPP_INFO(LOGGER, "[starting pick and place]");
 
     //arm_system.arm_1.object = objs.pop("", "random");
     //arm_system.arm_2.object = objs.pop("", "random");
 
-    e.x = 0;
-    e.y = -0.5;
-    e.z = 1;
+    int amount_to_appear = std::min( number_of_test_cases - int(objs.size()) - runner1.check(), 8);
 
-    //objs.updatePoint(e);
-    arm_system.arm_1.object = objs.pop("robot_1", "", e);
+    if(objs.size() < 6)
+    {
+      auto message = std_msgs::msg::String();
+      for(int i = 0; i < amount_to_appear; i++){
+        publisher_->publish(message);
+      }
+    }
+
+    geometry_msgs::msg::PoseStamped point_x = dual_arm.getCurrentPose("panda_1_leftfinger");
+      // e.x = 0;
+      // e.y = -0.5;
+      // e.z = 1;
+    e.x = point_x.pose.position.x;
+    e.y = point_x.pose.position.y;
+    e.z = point_x.pose.position.z;
     
-    e.x = 0;
-    e.y = 0.5;
-    e.z = 1;  
     //objs.updatePoint(e);
-    arm_system.arm_2.object = objs.pop("robot_2", "", e);
+    bool execute_one =  objs.get_execute_one(); //counter % 2==0 ? true: false; // objs.get_execute_one();
 
+    if(execute_one){
+      RCLCPP_INFO(LOGGER, "[execute_one : true]");
+    }else{
+      RCLCPP_INFO(LOGGER, "[execute_one : false]");
+    }
+    
+    arm_system.arm_1.object = objs.pop("robot_1", "", e);
 
     RCLCPP_INFO(LOGGER, "[object id %s ]", arm_system.arm_1.object.collisionObject.id.c_str());
-    RCLCPP_INFO(LOGGER, "[object id %s ]", arm_system.arm_2.object.collisionObject.id.c_str());
 
     RCLCPP_INFO(LOGGER, "Next tray selection");
 
     auto object_1_id = arm_system.arm_1.object.collisionObject.id;
-    auto object_2_id = arm_system.arm_2.object.collisionObject.id;
 
+    RCLCPP_INFO(LOGGER, "[checkpoint] Robot arm 1 trying %s for %d time", arm_system.arm_1.object.collisionObject.id.c_str(), arm_system.arm_1.object.robot_1_planned_times);   
     RCLCPP_INFO(LOGGER, "Size colors %li", colors.size());
 
     if (colors[object_1_id].color.r == 1 && colors[object_1_id].color.g == 0 && colors[object_1_id].color.b == 0)
       active_tray_arm_1 = &red_tray_1;
     else if (colors[object_1_id].color.r == 0 && colors[object_1_id].color.g == 0 && colors[object_1_id].color.b == 1)
       active_tray_arm_1 = &blue_tray_1;
-    else
+    else{
+      RCLCPP_INFO(LOGGER, "Damn went to continue");
       continue;
-    
-    if (colors[object_2_id].color.r == 1 && colors[object_2_id].color.g == 0 && colors[object_2_id].color.b == 0)
-      active_tray_arm_2 = &red_tray_2;
-    else if (colors[object_2_id].color.r == 0 && colors[object_2_id].color.g == 0 && colors[object_2_id].color.b == 1)
-      active_tray_arm_2 = &blue_tray_2;
-    else
-      continue;
+    }
+
+    if(!execute_one){
+      point_x = dual_arm.getCurrentPose("panda_2_leftfinger");
+      // e.x = 0;
+      // e.y = 0.5;
+      // e.z = 1;
+      e.x = point_x.pose.position.x;
+      e.y = point_x.pose.position.y;
+      e.z = point_x.pose.position.z;
+      //objs.updatePoint(e);
+
+      arm_system.arm_2.object = objs.pop("robot_2", "", e);
+
+      RCLCPP_INFO(LOGGER, "[object id %s ]", arm_system.arm_2.object.collisionObject.id.c_str());
+
+      auto object_2_id = arm_system.arm_2.object.collisionObject.id;
+
+      RCLCPP_INFO(LOGGER, "[checkpoint] Robot arm 2 trying %s for %d time", arm_system.arm_2.object.collisionObject.id.c_str(), arm_system.arm_2.object.robot_2_planned_times);
+
+      if (colors[object_2_id].color.r == 1 && colors[object_2_id].color.g == 0 && colors[object_2_id].color.b == 0)
+        active_tray_arm_2 = &red_tray_2;
+      else if (colors[object_2_id].color.r == 0 && colors[object_2_id].color.g == 0 && colors[object_2_id].color.b == 1)
+        active_tray_arm_2 = &blue_tray_2;
+      else
+        continue;
+    }
     
     
     bool success = plan_and_move(arm_system, Movement::PREGRASP, kinematic_state, 1, dual_arm,
-                                 active_tray_arm_1, active_tray_arm_2);
+                                 active_tray_arm_1, active_tray_arm_2, execute_one);
     if (!success)
     {
       continue;
@@ -187,40 +217,52 @@ void main_thread()
     // pnp_2->open_gripper();
 
     success = plan_and_move(arm_system, Movement::GRASP, kinematic_state, 1, dual_arm,
-                            active_tray_arm_1, active_tray_arm_2);
+                            active_tray_arm_1, active_tray_arm_2, execute_one);
     if (!success)
     {
       continue;
     }
 
     // from here onwards we cannot fail since the object is attached
-
+    RCLCPP_INFO(LOGGER, "[Executed before]");
     pnp_1->grasp_object(arm_system.arm_1.object.collisionObject);
-    pnp_2->grasp_object(arm_system.arm_2.object.collisionObject);
+    RCLCPP_INFO(LOGGER, "[Executed After]");
+    
+    if(!execute_one){
+      pnp_2->grasp_object(arm_system.arm_2.object.collisionObject);
+    }
 
-    auto cache_1 = active_tray_arm_1->z * 0.05;
-    auto cache_2 = active_tray_arm_2->z * 0.05;
+    //auto cache_1 = active_tray_arm_1->z * 0.05;
+
+    //auto cache_2 = active_tray_arm_2->z * 0.05;
+
+    RCLCPP_INFO(LOGGER, "[Executed 2]");
 
     plan_and_move(arm_system, Movement::PREMOVE, kinematic_state, 1, dual_arm,
-                  active_tray_arm_1, active_tray_arm_2);
+                  active_tray_arm_1, active_tray_arm_2, execute_one);
 
     plan_and_move(arm_system, Movement::MOVE, kinematic_state, 1, dual_arm,
-                  active_tray_arm_1, active_tray_arm_2);
+                  active_tray_arm_1, active_tray_arm_2, execute_one);
 
     plan_and_move(arm_system, Movement::PUTDOWN, kinematic_state, 1, dual_arm,
-                  active_tray_arm_1, active_tray_arm_2);
+                  active_tray_arm_1, active_tray_arm_2, execute_one);
 
     pnp_1->release_object(arm_system.arm_1.object.collisionObject);
-    pnp_2->release_object(arm_system.arm_2.object.collisionObject);
+
+    if(!execute_one){
+      pnp_2->release_object(arm_system.arm_2.object.collisionObject);
+    }
 
     plan_and_move(arm_system, Movement::POSTMOVE, kinematic_state, 1, dual_arm,
-                  active_tray_arm_1, active_tray_arm_2);
+                  active_tray_arm_1, active_tray_arm_2, execute_one);
 
     // spawn two new cubes
     auto message = std_msgs::msg::String();
 
     runner1.increment();
-    runner1.increment();
+    if(!execute_one){
+      runner1.increment();
+    }
     RCLCPP_INFO(LOGGER, "[checkpoint] Robot 1 successful placing. Request to spawn a new cube ");
     RCLCPP_INFO(LOGGER, "[checkpoint] Robot 2 successful placing. Request to spawn a new cube ");
 
@@ -236,14 +278,13 @@ void main_thread()
 
 bool plan_and_move(dual_arm_state &arm_system, Movement movement, moveit::core::RobotStatePtr kinematic_state,
                    double timeout, moveit::planning_interface::MoveGroupInterface &dual_arm, tray_helper *active_tray_arm_1,
-                   tray_helper *active_tray_arm_2)
+                   tray_helper *active_tray_arm_2, bool executeOneOnly)
 {
   static int cache_1;
   static int cache_2;
 
   if (movement == Movement::PREGRASP)
   {
-
     RCLCPP_INFO(LOGGER, "[Movement type pregrasp]");
     arm_system.arm_1.pose.position.x = arm_system.arm_1.object.collisionObject.pose.position.x;
     arm_system.arm_1.pose.position.y = arm_system.arm_1.object.collisionObject.pose.position.y;
@@ -254,26 +295,32 @@ bool plan_and_move(dual_arm_state &arm_system, Movement movement, moveit::core::
     arm_system.arm_1.pose.orientation.z = 0;
     arm_system.arm_1.pose.orientation.w = 0;
 
-    arm_system.arm_2.pose.position.x = arm_system.arm_2.object.collisionObject.pose.position.x;
-    arm_system.arm_2.pose.position.y = arm_system.arm_2.object.collisionObject.pose.position.y;
-    arm_system.arm_2.pose.position.z = arm_system.arm_2.object.collisionObject.pose.position.z + 0.25;
+    if(!executeOneOnly){
+      arm_system.arm_2.pose.position.x = arm_system.arm_2.object.collisionObject.pose.position.x;
+      arm_system.arm_2.pose.position.y = arm_system.arm_2.object.collisionObject.pose.position.y;
+      arm_system.arm_2.pose.position.z = arm_system.arm_2.object.collisionObject.pose.position.z + 0.25;
 
-    arm_system.arm_2.pose.orientation.x = arm_system.arm_2.object.collisionObject.pose.orientation.w;
-    arm_system.arm_2.pose.orientation.y = arm_system.arm_2.object.collisionObject.pose.orientation.z;
-    arm_system.arm_2.pose.orientation.z = 0;
-    arm_system.arm_2.pose.orientation.w = 0;
+      arm_system.arm_2.pose.orientation.x = arm_system.arm_2.object.collisionObject.pose.orientation.w;
+      arm_system.arm_2.pose.orientation.y = arm_system.arm_2.object.collisionObject.pose.orientation.z;
+      arm_system.arm_2.pose.orientation.z = 0;
+      arm_system.arm_2.pose.orientation.w = 0;
+    }
   }
   else if (movement == Movement::GRASP)
   {
     RCLCPP_INFO(LOGGER, "[Movement type grasp]");
     arm_system.arm_1.pose.position.z = arm_system.arm_1.object.collisionObject.pose.position.z + 0.1;
-    arm_system.arm_2.pose.position.z = arm_system.arm_2.object.collisionObject.pose.position.z + 0.1;
+    if(!executeOneOnly){
+      arm_system.arm_2.pose.position.z = arm_system.arm_2.object.collisionObject.pose.position.z + 0.1;
+    }
   }
   else if (movement == Movement::PREMOVE)
   {
     RCLCPP_INFO(LOGGER, "[Movement type pre move]");
     arm_system.arm_1.pose.position.z = arm_system.arm_1.object.collisionObject.pose.position.z + 0.25;
-    arm_system.arm_2.pose.position.z = arm_system.arm_2.object.collisionObject.pose.position.z + 0.25;
+    if(!executeOneOnly){
+      arm_system.arm_2.pose.position.z = arm_system.arm_2.object.collisionObject.pose.position.z + 0.25;
+    }
   }
   else if (movement == Movement::MOVE)
   {
@@ -289,84 +336,135 @@ bool plan_and_move(dual_arm_state &arm_system, Movement movement, moveit::core::
 
     active_tray_arm_1->next();
 
-    arm_system.arm_2.pose.position.x = active_tray_arm_2->get_x();
-    arm_system.arm_2.pose.position.y = active_tray_arm_2->get_y();
-    arm_system.arm_2.pose.position.z = 1.28 + active_tray_arm_2->z * 0.05;
+    if(!executeOneOnly){
+      arm_system.arm_2.pose.position.x = active_tray_arm_2->get_x();
+      arm_system.arm_2.pose.position.y = active_tray_arm_2->get_y();
+      arm_system.arm_2.pose.position.z = 1.28 + active_tray_arm_2->z * 0.05;
 
-    arm_system.arm_2.pose.orientation.x = 1;
-    arm_system.arm_2.pose.orientation.y = 0;
+      arm_system.arm_2.pose.orientation.x = 1;
+      arm_system.arm_2.pose.orientation.y = 0;
 
-    cache_2 = active_tray_arm_2->z * 0.05;
+      cache_2 = active_tray_arm_2->z * 0.05;
 
-    active_tray_arm_2->next();
+      active_tray_arm_2->next();
+    }
   }
   else if (movement == Movement::PUTDOWN)
   {
     RCLCPP_INFO(LOGGER, "[Movement type putdown move]");
 
     arm_system.arm_1.pose.position.z = 1.141 + cache_1;
-    arm_system.arm_2.pose.position.z = 1.141 + cache_2;
+    if(!executeOneOnly){
+      arm_system.arm_2.pose.position.z = 1.141 + cache_2;
+    }
   }
   else if (movement == Movement::POSTMOVE)
   {
     RCLCPP_INFO(LOGGER, "[Movement type post move]");
 
     arm_system.arm_1.pose.position.z = 1.28 + cache_1;
-    arm_system.arm_2.pose.position.z = 1.28 + cache_2;
+    if(!executeOneOnly){
+      arm_system.arm_2.pose.position.z = 1.28 + cache_2;
+    }
   }
 
-  bool executionSuccessful = false;
-  int counter = 0;
-  while (!executionSuccessful)
+  if(executeOneOnly){
+
+    bool executionSuccessful = false;
+    int counter = 0;
+
+    while (!executionSuccessful)
+    {
+      bool a_bot_found_ik = kinematic_state->setFromIK(arm_system.arm_1.arm_joint_model_group, arm_system.arm_1.pose, timeout);
+      
+      if (a_bot_found_ik)
+      {
+        kinematic_state->copyJointGroupPositions(arm_system.arm_1.arm_joint_model_group, arm_system.arm_1.arm_joint_values);
+        dual_arm.setJointValueTarget(arm_system.arm_1.arm_joint_names, arm_system.arm_1.arm_joint_values);
+        RCLCPP_INFO(LOGGER, "IK found for arm 1");
+      }
+
+      std::vector<double> arm_joint_values(arm_system.arm_2.arm_joint_names.size(), 0);
+      dual_arm.setJointValueTarget(arm_system.arm_2.arm_joint_names, arm_joint_values );
+
+      moveit::planning_interface::MoveGroupInterface::Plan my_plan;
+      if (a_bot_found_ik)
+      {
+        executionSuccessful = dual_arm.move() == moveit::core::MoveItErrorCode::SUCCESS;
+        if(!executionSuccessful){
+            objs.push(arm_system.arm_1.object);
+            pnp_1->open_gripper();
+            return false;
+          }
+      }
+      else
+      {
+        if (movement == Movement::PREGRASP || movement == Movement::GRASP)
+        {
+          objs.push(arm_system.arm_1.object);
+          return false;
+        }
+      }
+    }
+    
+  }
+  else
   {
-
-    bool a_bot_found_ik = kinematic_state->setFromIK(arm_system.arm_1.arm_joint_model_group, arm_system.arm_1.pose, timeout);
-    bool b_bot_found_ik = kinematic_state->setFromIK(arm_system.arm_2.arm_joint_model_group, arm_system.arm_2.pose, timeout);
-
-    if (a_bot_found_ik)
+    bool executionSuccessful = false;
+    int counter = 0;
+    while (!executionSuccessful)
     {
-      kinematic_state->copyJointGroupPositions(arm_system.arm_1.arm_joint_model_group, arm_system.arm_1.arm_joint_values);
-      dual_arm.setJointValueTarget(arm_system.arm_1.arm_joint_names, arm_system.arm_1.arm_joint_values);
-      RCLCPP_INFO(LOGGER, "IK found for arm 1");
-    }
 
-    if (b_bot_found_ik)
-    {
-      kinematic_state->copyJointGroupPositions(arm_system.arm_2.arm_joint_model_group, arm_system.arm_2.arm_joint_values);
-      dual_arm.setJointValueTarget(arm_system.arm_2.arm_joint_names, arm_system.arm_2.arm_joint_values);
-      RCLCPP_INFO(LOGGER, "IK found for arm 2");
-    }
+      bool a_bot_found_ik = kinematic_state->setFromIK(arm_system.arm_1.arm_joint_model_group, arm_system.arm_1.pose, timeout);
+      bool b_bot_found_ik = kinematic_state->setFromIK(arm_system.arm_2.arm_joint_model_group, arm_system.arm_2.pose, timeout);
 
-    moveit::planning_interface::MoveGroupInterface::Plan my_plan;
-    if (a_bot_found_ik && b_bot_found_ik)
-    {
-      // bool success = (dual_arm.plan(my_plan) == moveit::core::MoveItErrorCode::SUCCESS);
-      // if (!success || my_plan.trajectory_.joint_trajectory.points.size() == 0)
-      // {
-      //   RCLCPP_INFO(LOGGER, "Plan did not succeed");
-      //   if (movement == Movement::PREGRASP || movement == Movement::GRASP)
-      //   {
-      //     objs.push(arm_system.arm_1.object);
-      //     objs.push(arm_system.arm_2.object);
-      //     return false;
-      //   }
-      // }
-      // executionSuccessful = dual_arm.execute(my_plan) == moveit::core::MoveItErrorCode::SUCCESS;
-      //dual_arm.move() -
-      executionSuccessful = dual_arm.move() == moveit::core::MoveItErrorCode::SUCCESS;
-      if(!executionSuccessful){
+      if (a_bot_found_ik)
+      {
+        kinematic_state->copyJointGroupPositions(arm_system.arm_1.arm_joint_model_group, arm_system.arm_1.arm_joint_values);
+        dual_arm.setJointValueTarget(arm_system.arm_1.arm_joint_names, arm_system.arm_1.arm_joint_values);
+        RCLCPP_INFO(LOGGER, "IK found for arm 1");
+      }
+
+      if (b_bot_found_ik)
+      {
+        kinematic_state->copyJointGroupPositions(arm_system.arm_2.arm_joint_model_group, arm_system.arm_2.arm_joint_values);
+        dual_arm.setJointValueTarget(arm_system.arm_2.arm_joint_names, arm_system.arm_2.arm_joint_values);
+        RCLCPP_INFO(LOGGER, "IK found for arm 2");
+      }
+
+      moveit::planning_interface::MoveGroupInterface::Plan my_plan;
+      if (a_bot_found_ik && b_bot_found_ik)
+      {
+        // bool success = (dual_arm.plan(my_plan) == moveit::core::MoveItErrorCode::SUCCESS);
+        // if (!success || my_plan.trajectory_.joint_trajectory.points.size() == 0)
+        // {
+        //   RCLCPP_INFO(LOGGER, "Plan did not succeed");
+        //   if (movement == Movement::PREGRASP || movement == Movement::GRASP)
+        //   {
+        //     objs.push(arm_system.arm_1.object);
+        //     objs.push(arm_system.arm_2.object);
+        //     return false;
+        //   }
+        // }
+        // executionSuccessful = dual_arm.execute(my_plan) == moveit::core::MoveItErrorCode::SUCCESS;
+        //dual_arm.move() -
+        executionSuccessful = dual_arm.move() == moveit::core::MoveItErrorCode::SUCCESS;
+        if(!executionSuccessful){
+            objs.push(arm_system.arm_1.object);
+            objs.push(arm_system.arm_2.object);
+            pnp_1->open_gripper();
+            pnp_2->open_gripper();
+            return false;
+          }
+      }
+      else
+      {
+        if (movement == Movement::PREGRASP || movement == Movement::GRASP)
+        {
           objs.push(arm_system.arm_1.object);
           objs.push(arm_system.arm_2.object);
           return false;
         }
-    }
-    else
-    {
-      if (movement == Movement::PREGRASP || movement == Movement::GRASP)
-      {
-        objs.push(arm_system.arm_1.object);
-        objs.push(arm_system.arm_2.object);
-        return false;
       }
     }
   }

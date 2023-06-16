@@ -29,6 +29,12 @@ struct CollisionPlanningObject
 
     CollisionPlanningObject() {}
 
+    CollisionPlanningObject(const CollisionPlanningObject &other){
+        collisionObject = other.collisionObject;
+        robot_1_planned_times = other.robot_1_planned_times;
+        robot_2_planned_times = other.robot_2_planned_times;
+    }
+
     CollisionPlanningObject(CollisionObject c, int r_1, int r_2) : collisionObject(c), robot_1_planned_times(r_1), robot_2_planned_times(r_2) {}
 
     CollisionPlanningObject &operator=(const CollisionPlanningObject &other)
@@ -49,6 +55,7 @@ private:
     std::vector<CollisionPlanningObject> priority_queue;
     Point3D point;
     mutable std::mutex mutex;
+    bool execute_one = false;
 
     float calculateEuclideanDistance(const CollisionObject &cube, const Point3D &point) const
     {
@@ -86,6 +93,10 @@ public:
     {
         //std::lock_guard<std::mutex> lock(mutex);
         point = p;
+    }
+
+    bool get_execute_one(){
+        return execute_one;
     }
 
     CollisionPlanningObject pop(std::string robot_planning, std::string s, const Point3D &p)
@@ -128,15 +139,18 @@ public:
         size_t current_index = 0;
         float minDistance = std::numeric_limits<float>::max();
 
-        for (size_t i = 0; i < priority_queue.size(); ++i)
+        for (size_t i = 0; i < priority_queue.size(); i++)
         {
             float distance = calculateEuclideanDistance(priority_queue[i].collisionObject, point);
             if (distance < minDistance)
             {
-                if (robot_planning.compare("robot_1") && priority_queue[i].robot_1_planned_times >= 5 ||
-                    robot_planning.compare("robot_2") && priority_queue[i].robot_2_planned_times >= 5)
+                if (robot_planning.compare("robot_1") == 0 && priority_queue[i].robot_1_planned_times >= 3 ||
+                    robot_planning.compare("robot_2") == 0 && priority_queue[i].robot_2_planned_times >= 3)
                 {
-                    continue;
+                    execute_one = true;
+                    priority_queue[i].robot_1_planned_times  = 0;
+                    priority_queue[i].robot_2_planned_times  = 0;
+                    //continue;
                 }
                 minDistance = distance;
                 current_index = i;
@@ -144,7 +158,7 @@ public:
         }
 
         CollisionPlanningObject minObject = priority_queue[current_index];
-        if (robot_planning.compare("robot_1"))
+        if (robot_planning.compare("robot_1") == 0)
         {
             minObject.robot_1_planned_times++;
         }

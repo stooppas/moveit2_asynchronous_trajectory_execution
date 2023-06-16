@@ -81,13 +81,9 @@ void update_planning_scene()
       }
     }
 
-    if(objs.size() < 4)
-    {
-      auto message = std_msgs::msg::String();
-      for(int i = 0; i < 4; i++){
-        publisher_->publish(message);
-      }
-    }
+    // if(update_scene_called_once){
+      
+    // }
 
     std::this_thread::sleep_for(1.0s);
     update_scene_called_once = true;
@@ -128,23 +124,43 @@ void main_thread_arm(std::shared_ptr<primitive_pick_and_place> pnp, std::string 
     CollisionPlanningObject current_object;
 
     // change end effector position based on the robot available
+
+    // we need to get position of the tool tip
     if (robot_arm.compare("panda_1") == 0)
     {
-      e.x = 0;
-      e.y = -0.5;
-      e.z = 1;
+      geometry_msgs::msg::PoseStamped point_x = panda_arm.getCurrentPose("panda_1_leftfinger");
+      // e.x = 0;
+      // e.y = -0.5;
+      // e.z = 1;
+      e.x = point_x.pose.position.x;
+      e.y = point_x.pose.position.y;
+      e.z = point_x.pose.position.z;
       curren_planning_robot = "robot_1";
     }
     else //(!planned_for_panda_2)
     {
-      e.x = 0;
-      e.y = 0.5;
-      e.z = 1;
+      geometry_msgs::msg::PoseStamped point_x = panda_arm.getCurrentPose("panda_2_leftfinger");
+      // e.x = 0;
+      // e.y = 0.5;
+      // e.z = 1;
+      e.x = point_x.pose.position.x;
+      e.y = point_x.pose.position.y;
+      e.z = point_x.pose.position.z;
       curren_planning_robot = "robot_2";
     }
 
     //objs.updatePoint(e);
     //current_object = objs.pop(curren_planning_robot, "random");
+
+    if(objs.size() < 4)
+    {
+      auto message = std_msgs::msg::String();
+      for(int i = 0; i < 8; i++){
+        publisher_->publish(message);
+      }
+    }
+
+
     current_object = objs.pop(curren_planning_robot, "", e);
 
     auto object_id = current_object.collisionObject.id;
@@ -200,7 +216,7 @@ void main_thread_arm(std::shared_ptr<primitive_pick_and_place> pnp, std::string 
       objs.push(current_object_1);
     }else{
       runner2.increment();
-      RCLCPP_INFO(LOGGER, "[checkpoint] {%s} successful placing. Request to spawn a new cube ", curren_planning_robot);
+      RCLCPP_INFO(LOGGER, "[checkpoint] {%s} successful placing. Request to spawn a new cube ", curren_planning_robot.c_str());
             
       if(runner2.check() >= number_of_test_cases){
         RCLCPP_INFO(LOGGER, "[terminate]");
@@ -245,7 +261,7 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
     {
       kinematic_state->copyJointGroupPositions(arm_1_state.arm_joint_model_group, arm_1_state.arm_joint_values);
       panda_1_arm.setJointValueTarget(arm_1_state.arm_joint_names, arm_1_state.arm_joint_values);
-      RCLCPP_INFO(LOGGER, "IK found for arm 1");
+      RCLCPP_INFO(LOGGER, "IK found for arm %d", s);
     }else{
       continue;
     }
@@ -283,7 +299,7 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
     {
       kinematic_state->copyJointGroupPositions(arm_1_state.arm_joint_model_group, arm_1_state.arm_joint_values);
       panda_1_arm.setJointValueTarget(arm_1_state.arm_joint_names, arm_1_state.arm_joint_values);
-      RCLCPP_INFO(LOGGER, "IK found for arm 1");
+      RCLCPP_INFO(LOGGER, "IK found for arm %d", s);
     }else{
       continue;
     }
@@ -327,7 +343,7 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
     {
       kinematic_state->copyJointGroupPositions(arm_1_state.arm_joint_model_group, arm_1_state.arm_joint_values);
       panda_1_arm.setJointValueTarget(arm_1_state.arm_joint_names, arm_1_state.arm_joint_values);
-      RCLCPP_INFO(LOGGER, "IK found for arm 1");
+      RCLCPP_INFO(LOGGER, "IK found for arm %d", s);
     }else{
       continue;
     }
@@ -369,7 +385,7 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
     {
       kinematic_state->copyJointGroupPositions(arm_1_state.arm_joint_model_group, arm_1_state.arm_joint_values);
       panda_1_arm.setJointValueTarget(arm_1_state.arm_joint_names, arm_1_state.arm_joint_values);
-      RCLCPP_INFO(LOGGER, "IK found for arm 1");
+      RCLCPP_INFO(LOGGER, "IK found for arm %d", s);
     }else{
       continue;
     }
@@ -405,7 +421,7 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
     {
       kinematic_state->copyJointGroupPositions(arm_1_state.arm_joint_model_group, arm_1_state.arm_joint_values);
       panda_1_arm.setJointValueTarget(arm_1_state.arm_joint_names, arm_1_state.arm_joint_values);
-      RCLCPP_INFO(LOGGER, "IK found for arm 1");
+      RCLCPP_INFO(LOGGER, "IK found for arm %d", s);
     }else{
       continue;
     }
@@ -447,7 +463,7 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
     {
       kinematic_state->copyJointGroupPositions(arm_1_state.arm_joint_model_group, arm_1_state.arm_joint_values);
       panda_1_arm.setJointValueTarget(arm_1_state.arm_joint_names, arm_1_state.arm_joint_values);
-      RCLCPP_INFO(LOGGER, "IK found for arm 1");
+      RCLCPP_INFO(LOGGER, "IK found for arm %d", s);
     }else{
       continue;
     }
@@ -465,6 +481,14 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
         continue;
       }
       executionSuccessful = panda_1_arm.execute(my_plan) == moveit::core::MoveItErrorCode::SUCCESS;
+      if(!executionSuccessful)
+      {
+        if(s == 1){
+          pnp_1->release_object(object);
+        }else if(s == 2){
+          pnp_2->release_object(object);
+        }
+      }
     }
   }
   
