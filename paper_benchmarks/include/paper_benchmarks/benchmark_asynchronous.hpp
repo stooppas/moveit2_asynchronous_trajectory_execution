@@ -51,7 +51,7 @@ struct arm_state
 };
 bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interface::MoveGroupInterface &panda_1_arm,  
   moveit::core::RobotModelConstPtr kinematic_model, moveit::core::RobotStatePtr kinematic_state, 
-  moveit_msgs::msg::CollisionObject &object, tray_helper *tray, int s);
+  moveit_msgs::msg::CollisionObject &object, tray_helper *tray, int s, std::string color);
 
 void main_thread_arm(std::shared_ptr<primitive_pick_and_place> pnp, std::string robot_arm);
 

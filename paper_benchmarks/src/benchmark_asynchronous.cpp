@@ -15,8 +15,13 @@ enum ROBOT_STATE{
   PREMOVE,
   MOVE,
   PUTDOWN,
-  POSTMOVE
+  POSTMOVE,
+  RANDOM_1,
+  RANDOM_2
 };
+
+bool plan_and_move(arm_state &arm_1_state, ROBOT_STATE movement, moveit::core::RobotStatePtr kinematic_state,
+                   double timeout, moveit::planning_interface::MoveGroupInterface &panda_arm, tray_helper *active_tray, int s);
 
 ROBOT_STATE robot_1_state;
 ROBOT_STATE robot_2_state;
@@ -171,6 +176,7 @@ void main_thread_arm(std::shared_ptr<primitive_pick_and_place> pnp, std::string 
 
   while(!objs.empty()){
     CollisionPlanningObject current_object;
+    std::string color;
 
     // change end effector position based on the robot available
 
@@ -198,9 +204,6 @@ void main_thread_arm(std::shared_ptr<primitive_pick_and_place> pnp, std::string 
       curren_planning_robot = "robot_2";
     }
 
-    //objs.updatePoint(e);
-    //current_object = objs.pop(curren_planning_robot, "random");
-
     current_object = objs.pop(curren_planning_robot, "", e);
     
     auto object_id = current_object.collisionObject.id;
@@ -216,19 +219,27 @@ void main_thread_arm(std::shared_ptr<primitive_pick_and_place> pnp, std::string 
     tray_helper *active_tray;
     if (robot_arm.compare("panda_1") == 0)
     {
-      if (colors[object_id].color.r == 1 && colors[object_id].color.g == 0 && colors[object_id].color.b == 0)
+      if (colors[object_id].color.r == 1 && colors[object_id].color.g == 0 && colors[object_id].color.b == 0){
         active_tray = &red_tray_1;
-      else if (colors[object_id].color.r == 0 && colors[object_id].color.g == 0 && colors[object_id].color.b == 1)
+        color = "RED";
+      }
+      else if (colors[object_id].color.r == 0 && colors[object_id].color.g == 0 && colors[object_id].color.b == 1){
         active_tray = &blue_tray_1;
+        color = "BLUE";
+      }
       else
         continue;
     }
     else //(!planned_for_panda_2)
     {
-      if (colors[object_id].color.r == 1 && colors[object_id].color.g == 0 && colors[object_id].color.b == 0)
+      if (colors[object_id].color.r == 1 && colors[object_id].color.g == 0 && colors[object_id].color.b == 0){
         active_tray = &red_tray_2;
-      else if (colors[object_id].color.r == 0 && colors[object_id].color.g == 0 && colors[object_id].color.b == 1)
+        color = "RED";
+      }
+      else if (colors[object_id].color.r == 0 && colors[object_id].color.g == 0 && colors[object_id].color.b == 1){
         active_tray = &blue_tray_2;
+        color = "BLUE";
+      }
       else
         continue;
     }
@@ -244,12 +255,12 @@ void main_thread_arm(std::shared_ptr<primitive_pick_and_place> pnp, std::string 
     if (robot_arm.compare("panda_1") == 0)
     {
       panda_1_success = advancedExecuteTrajectory(arm_s, panda_arm, kinematic_model, 
-    kinematic_state, current_object_1.collisionObject,active_tray, 1);
+    kinematic_state, current_object_1.collisionObject,active_tray, 1, color);
     }
     else //(!planned_for_panda_2)
     {
       panda_1_success = advancedExecuteTrajectory(arm_s, panda_arm, kinematic_model, 
-    kinematic_state, current_object_1.collisionObject,active_tray, 2);
+    kinematic_state, current_object_1.collisionObject,active_tray, 2, color);
     }
           
     if(!panda_1_success)
@@ -268,12 +279,10 @@ void main_thread_arm(std::shared_ptr<primitive_pick_and_place> pnp, std::string 
 
 }
 
-bool plan_and_move(arm_state &arm_1_state, ROBOT_STATE movement, moveit::core::RobotStatePtr kinematic_state,
-                   double timeout, moveit::planning_interface::MoveGroupInterface &panda_arm, tray_helper *active_tray);
 
 bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interface::MoveGroupInterface &panda_1_arm,  
   moveit::core::RobotModelConstPtr kinematic_model, moveit::core::RobotStatePtr kinematic_state, 
-  moveit_msgs::msg::CollisionObject &object, tray_helper *tray, int s)
+  moveit_msgs::msg::CollisionObject &object, tray_helper *tray, int s, std::string color)
 {
 
   RCLCPP_INFO(LOGGER, "Start execution of Object: %s", object.id.c_str());
@@ -281,14 +290,27 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
 
   std::string robot = "robot_1";
 
-  bool success = plan_and_move(arm_1_state, ROBOT_STATE::PREGRASP, kinematic_state, 1, panda_1_arm, tray);
+
+  if(s == 1){
+    robot_1_state = ROBOT_STATE::PREGRASP;
+  }else if(s == 2){
+    robot_2_state = ROBOT_STATE::PREGRASP;
+  }
+
+  bool success = plan_and_move(arm_1_state, ROBOT_STATE::PREGRASP, kinematic_state, 1, panda_1_arm, tray, s);
   
   if (!success)
   {
     return false;
   }
 
-  success = plan_and_move(arm_1_state, ROBOT_STATE::GRASP, kinematic_state, 1, panda_1_arm, tray);
+  if(s == 1){
+    robot_1_state = ROBOT_STATE::GRASP;
+  }else if(s == 2){
+    robot_2_state = ROBOT_STATE::GRASP;
+  }
+
+  success = plan_and_move(arm_1_state, ROBOT_STATE::GRASP, kinematic_state, 1, panda_1_arm, tray, s);
   
   if (!success)
   {
@@ -301,11 +323,35 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
     pnp_2->grasp_object(arm_1_state.object.collisionObject);
   }
 
-  plan_and_move(arm_1_state, ROBOT_STATE::PREMOVE, kinematic_state, 1, panda_1_arm, tray);
+  if(s == 1){
+    robot_1_state = ROBOT_STATE::PREMOVE;
+  }else if(s == 2){
+    robot_2_state = ROBOT_STATE::PREMOVE;
+  }
+  plan_and_move(arm_1_state, ROBOT_STATE::PREMOVE, kinematic_state, 1, panda_1_arm, tray, s);
 
-  plan_and_move(arm_1_state, ROBOT_STATE::MOVE, kinematic_state, 1, panda_1_arm, tray);
 
-  plan_and_move(arm_1_state, ROBOT_STATE::PUTDOWN, kinematic_state, 1, panda_1_arm, tray);
+  if(s == 1){
+    robot_1_state = ROBOT_STATE::MOVE;
+  }else if(s == 2){
+    robot_2_state = ROBOT_STATE::MOVE;
+  }
+  plan_and_move(arm_1_state, ROBOT_STATE::MOVE, kinematic_state, 1, panda_1_arm, tray, s);
+
+  // Task differentiation based on the color
+  if (color.compare("BLUE") == 0){ 
+    plan_and_move(arm_1_state, ROBOT_STATE::RANDOM_1, kinematic_state, 1, panda_1_arm, tray, s);
+
+    plan_and_move(arm_1_state, ROBOT_STATE::RANDOM_2, kinematic_state, 1, panda_1_arm, tray, s);
+  }
+
+
+  if(s == 1){
+    robot_1_state = ROBOT_STATE::PUTDOWN;
+  }else if(s == 2){
+    robot_2_state = ROBOT_STATE::PUTDOWN;
+  }
+  plan_and_move(arm_1_state, ROBOT_STATE::PUTDOWN, kinematic_state, 1, panda_1_arm, tray, s);
 
   if(s == 1){
     pnp_1->release_object(arm_1_state.object.collisionObject);
@@ -313,7 +359,12 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
     pnp_2->release_object(arm_1_state.object.collisionObject);
   } 
   
-  plan_and_move(arm_1_state, ROBOT_STATE::POSTMOVE, kinematic_state, 1, panda_1_arm, tray);
+  if(s == 1){
+    robot_1_state = ROBOT_STATE::POSTMOVE;
+  }else if(s == 2){
+    robot_2_state = ROBOT_STATE::POSTMOVE;
+  }
+  plan_and_move(arm_1_state, ROBOT_STATE::POSTMOVE, kinematic_state, 1, panda_1_arm, tray, s);
 
   return true;
 }
@@ -321,7 +372,7 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
 
 
 bool plan_and_move(arm_state &arm_1_state, ROBOT_STATE movement, moveit::core::RobotStatePtr kinematic_state,
-                   double timeout, moveit::planning_interface::MoveGroupInterface &panda_arm, tray_helper *active_tray)
+                   double timeout, moveit::planning_interface::MoveGroupInterface &panda_arm, tray_helper *active_tray, int s)
 {
   thread_local int cache_1;
 
@@ -372,6 +423,18 @@ bool plan_and_move(arm_state &arm_1_state, ROBOT_STATE movement, moveit::core::R
     arm_1_state.pose.position.z = 1.28 + cache_1;
   }
 
+  else if (movement == ROBOT_STATE::RANDOM_1)
+  {
+    RCLCPP_INFO(LOGGER, "[Movement type random 1]");
+    arm_1_state.pose.position.z = 1.48 + cache_1;
+  }
+
+  else if (movement == ROBOT_STATE::RANDOM_2)
+  {
+    RCLCPP_INFO(LOGGER, "[Movement type random 2]");
+     arm_1_state.pose.position.z = 1.48 + cache_1;
+  }
+
   bool executionSuccessful = false;
   int counter = 0;
 
@@ -392,7 +455,11 @@ bool plan_and_move(arm_state &arm_1_state, ROBOT_STATE movement, moveit::core::R
       executionSuccessful = panda_arm.move() == moveit::core::MoveItErrorCode::SUCCESS;
       if(!executionSuccessful){
         objs.push(arm_1_state.object);
-        //pnp_1->open_gripper();
+        if(s == 1){
+          pnp_1->open_gripper();
+        }else if(s == 2){
+          pnp_2->open_gripper();
+        }
         return false;
       }
     }
