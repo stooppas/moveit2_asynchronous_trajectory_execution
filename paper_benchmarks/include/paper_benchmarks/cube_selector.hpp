@@ -56,6 +56,7 @@ private:
     Point3D point;
     mutable std::mutex mutex;
     bool execute_one = false;
+    int counter = 0;
 
     float calculateEuclideanDistance(const CollisionObject &cube, const Point3D &point) const
     {
@@ -105,6 +106,17 @@ public:
         if (result == 0)
         {
             std::lock_guard<std::mutex> lock(mutex);
+            if(priority_queue.size() == 2){
+                counter++;
+            }else{
+                counter=0;
+            }
+            if(counter == 3){
+                execute_one = true;
+            }else{
+                execute_one = false;
+            }
+
             int randomNum = std::rand() % (priority_queue.size());
             std::cout << "Generating random " << randomNum << " " << priority_queue.size() << std::endl;
             CollisionPlanningObject minObject = priority_queue[randomNum];

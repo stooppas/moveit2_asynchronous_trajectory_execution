@@ -7,7 +7,20 @@
 
 using namespace std::chrono_literals;
 
-int number_of_test_cases = 5;
+void add_objects_to_planning_scene();
+
+enum ROBOT_STATE{
+  PREGRASP,
+  GRASP,
+  PREMOVE,
+  MOVE,
+  POSTMOVE
+};
+
+ROBOT_STATE robot_1_state;
+ROBOT_STATE robot_2_state;
+
+volatile int number_of_test_cases = 5;
 
 static struct runner{
   int counter = 0;
@@ -46,6 +59,8 @@ int main(int argc, char **argv)
 
   new std::thread(update_planning_scene);
 
+  new std::thread(add_objects_to_planning_scene);
+
   std::thread t_1(main_thread_arm, pnp_1, "panda_1");
   std::thread t_2(main_thread_arm, pnp_2, "panda_2");
 
@@ -81,12 +96,45 @@ void update_planning_scene()
       }
     }
 
-    // if(update_scene_called_once){
-      
-    // }
-
     std::this_thread::sleep_for(1.0s);
     update_scene_called_once = true;
+  }
+}
+
+
+void add_objects_to_planning_scene(){
+
+  while(true){
+
+    while (!update_scene_called_once)
+    {
+      std::this_thread::sleep_for(1.0s);
+    }
+
+    if(robot_1_state == ROBOT_STATE::PREGRASP || robot_1_state == ROBOT_STATE::GRASP  || robot_1_state == ROBOT_STATE::PREMOVE|| 
+       robot_2_state == ROBOT_STATE::PREGRASP || robot_2_state == ROBOT_STATE::GRASP || robot_2_state == ROBOT_STATE::PREMOVE )
+    {
+      std::this_thread::sleep_for(0.5s);
+      continue;
+    } 
+
+    int amount_to_appear = std::min( number_of_test_cases - int(objs.size()) - runner2.check(), 8);
+
+    if(objs.size() < 6)
+    {
+      auto message = std_msgs::msg::String();
+      for(int i = 0; i < amount_to_appear; i++){
+        publisher_->publish(message);
+      }
+      std::this_thread::sleep_for(10.0s);
+
+    }else{
+      std::this_thread::sleep_for(3.0s);
+    }
+
+    if (amount_to_appear == 0)
+      break;
+
   }
 }
 
@@ -99,7 +147,7 @@ void main_thread_arm(std::shared_ptr<primitive_pick_and_place> pnp, std::string 
   moveit::planning_interface::MoveGroupInterface panda_arm(node, robot_arm);
   panda_arm.setMaxVelocityScalingFactor(0.50);
   panda_arm.setMaxAccelerationScalingFactor(0.50);
-  panda_arm.setNumPlanningAttempts(5);
+  panda_arm.setNumPlanningAttempts(20);
   panda_arm.setPlanningTime(1);
 
   moveit::core::RobotModelConstPtr kinematic_model = panda_arm.getRobotModel();
@@ -152,17 +200,8 @@ void main_thread_arm(std::shared_ptr<primitive_pick_and_place> pnp, std::string 
     //objs.updatePoint(e);
     //current_object = objs.pop(curren_planning_robot, "random");
 
-    if(objs.size() < 4)
-    {
-      auto message = std_msgs::msg::String();
-      for(int i = 0; i < 8; i++){
-        publisher_->publish(message);
-      }
-    }
-
-
-    current_object = objs.pop(curren_planning_robot, "", e);
-
+    current_object = objs.pop(curren_planning_robot, "random", e);
+    
     auto object_id = current_object.collisionObject.id;
     RCLCPP_INFO(LOGGER, "Object: %s", object_id.c_str());
 
@@ -237,6 +276,14 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
   geometry_msgs::msg::Pose pose;
 
   // Pre Grasp
+
+  if(s == 1){
+    robot_1_state = ROBOT_STATE::PREGRASP;
+  }else if(s == 2){
+    robot_2_state = ROBOT_STATE::PREGRASP;
+  }
+
+
   arm_1_state.pose.position.x = object.pose.position.x;
   arm_1_state.pose.position.y = object.pose.position.y;
   arm_1_state.pose.position.z = object.pose.position.z + 0.25;
@@ -249,6 +296,8 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
   bool executionSuccessful = false;
 
   RCLCPP_INFO(LOGGER, "Set from ik done ");
+
+  thread_local int counter = 0;
   
   while (!executionSuccessful)
   {
@@ -275,15 +324,41 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
       }
       if (!success || my_plan.trajectory_.joint_trajectory.points.size() == 0)
       {
+        if(s == 1){
+          pnp_1->home();
+        }else if(s == 2){
+          pnp_2->home();
+        }
         RCLCPP_INFO(LOGGER, "Plan did not succeed");
         return false;
       }
       executionSuccessful = panda_1_arm.execute(my_plan) == moveit::core::MoveItErrorCode::SUCCESS;
     }
+
+    if(!executionSuccessful){
+      if (counter > 2){
+        // pre move
+        if(s == 1){
+          pnp_1->home();
+          counter = 0;
+        }else if(s == 2){
+          pnp_2->home();
+          counter = 0;
+        }
+        return false;
+      }
+      counter++;
+    }
   }
 
 
-  // Pre Grasp
+  // Grasp
+  if(s == 1){
+    robot_1_state = ROBOT_STATE::GRASP;
+  }else if(s == 2){
+    robot_2_state = ROBOT_STATE::GRASP;
+  }
+
   arm_1_state.pose.position.z = object.pose.position.z + 0.1;
 
   executionSuccessful = false;
@@ -313,15 +388,39 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
       }
       if (!success || my_plan.trajectory_.joint_trajectory.points.size() == 0)
       {
+        if(s == 1){
+          pnp_1->home();
+        }else if(s == 2){
+          pnp_2->home();
+        }
         RCLCPP_INFO(LOGGER, "Plan did not succeed");
         return false;
       }
       executionSuccessful = panda_1_arm.execute(my_plan) == moveit::core::MoveItErrorCode::SUCCESS;
     }
+
+    if(!executionSuccessful){
+      if (counter > 3){
+        // pre move
+        if(s == 1){
+          pnp_1->home();
+        }else if(s == 2){
+          pnp_2->home();
+        }
+        return false;
+      }
+      counter++;
+    }
   }
 
 
   // pre move
+  if(s == 1){
+    robot_1_state = ROBOT_STATE::PREMOVE;
+  }else if(s == 2){
+    robot_2_state = ROBOT_STATE::PREMOVE;
+  }
+
   if(s == 1){
     pnp_1->grasp_object(object);
   }else if(s == 2){
@@ -365,6 +464,12 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
   }
 
   // Move
+  if(s == 1){
+    robot_1_state = ROBOT_STATE::MOVE;
+  }else if(s == 2){
+    robot_2_state = ROBOT_STATE::MOVE;
+  }
+
   arm_1_state.pose.position.x = tray->get_x();
   arm_1_state.pose.position.y = tray->get_y();
   arm_1_state.pose.position.z = 1.28 + tray->z * 0.05;
@@ -448,6 +553,12 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
     pnp_2->release_object(object);
   }
   // Post Move
+  if(s == 1){
+    robot_1_state = ROBOT_STATE::POSTMOVE;
+  }else if(s == 2){
+    robot_2_state = ROBOT_STATE::POSTMOVE;
+  }
+
   arm_1_state.pose.position.z = 1.28 + tray->z * 0.05;
 
   executionSuccessful = false;

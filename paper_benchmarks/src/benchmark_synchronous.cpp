@@ -148,8 +148,11 @@ void main_thread()
     e.z = point_x.pose.position.z;
     
     bool execute_one =  objs.get_execute_one(); 
+    
+    arm_system.arm_1.object = objs.pop("robot_1", "random", e);
 
-    arm_system.arm_1.object = objs.pop("robot_1", "", e);
+    execute_one = execute_one | objs.empty(); // if last item was the one picked
+
 
     RCLCPP_INFO(LOGGER, "[object id %s ]", arm_system.arm_1.object.collisionObject.id.c_str());
     RCLCPP_INFO(LOGGER, "Next tray selection");
@@ -173,7 +176,7 @@ void main_thread()
       e.y = point_x.pose.position.y;
       e.z = point_x.pose.position.z;
 
-      arm_system.arm_2.object = objs.pop("robot_2", "", e);
+      arm_system.arm_2.object = objs.pop("robot_2", "random", e);
 
       RCLCPP_INFO(LOGGER, "[object id %s ]", arm_system.arm_2.object.collisionObject.id.c_str());
 
