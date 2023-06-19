@@ -14,6 +14,7 @@ enum ROBOT_STATE{
   GRASP,
   PREMOVE,
   MOVE,
+  PUTDOWN,
   POSTMOVE
 };
 
@@ -200,7 +201,7 @@ void main_thread_arm(std::shared_ptr<primitive_pick_and_place> pnp, std::string 
     //objs.updatePoint(e);
     //current_object = objs.pop(curren_planning_robot, "random");
 
-    current_object = objs.pop(curren_planning_robot, "random", e);
+    current_object = objs.pop(curren_planning_robot, "", e);
     
     auto object_id = current_object.collisionObject.id;
     RCLCPP_INFO(LOGGER, "Object: %s", object_id.c_str());
@@ -232,9 +233,10 @@ void main_thread_arm(std::shared_ptr<primitive_pick_and_place> pnp, std::string 
         continue;
     }
     
-
     
     auto current_object_1 = std::move(current_object);
+
+    arm_s.object = current_object_1;
     
     //bool panda_1_success = executeTrajectory(pnp_1, current_object_1.collisionObject,active_tray);
     bool panda_1_success;
@@ -266,6 +268,8 @@ void main_thread_arm(std::shared_ptr<primitive_pick_and_place> pnp, std::string 
 
 }
 
+bool plan_and_move(arm_state &arm_1_state, ROBOT_STATE movement, moveit::core::RobotStatePtr kinematic_state,
+                   double timeout, moveit::planning_interface::MoveGroupInterface &panda_arm, tray_helper *active_tray);
 
 bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interface::MoveGroupInterface &panda_1_arm,  
   moveit::core::RobotModelConstPtr kinematic_model, moveit::core::RobotStatePtr kinematic_state, 
@@ -275,335 +279,131 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
   RCLCPP_INFO(LOGGER, "Start execution of Object: %s", object.id.c_str());
   geometry_msgs::msg::Pose pose;
 
-  // Pre Grasp
+  std::string robot = "robot_1";
 
-  if(s == 1){
-    robot_1_state = ROBOT_STATE::PREGRASP;
-  }else if(s == 2){
-    robot_2_state = ROBOT_STATE::PREGRASP;
+  bool success = plan_and_move(arm_1_state, ROBOT_STATE::PREGRASP, kinematic_state, 1, panda_1_arm, tray);
+  
+  if (!success)
+  {
+    return false;
   }
 
+  success = plan_and_move(arm_1_state, ROBOT_STATE::GRASP, kinematic_state, 1, panda_1_arm, tray);
+  
+  if (!success)
+  {
+    return false;
+  }
 
-  arm_1_state.pose.position.x = object.pose.position.x;
-  arm_1_state.pose.position.y = object.pose.position.y;
-  arm_1_state.pose.position.z = object.pose.position.z + 0.25;
+  if(s == 1){
+    pnp_1->grasp_object(arm_1_state.object.collisionObject);
+  }else if(s == 2){
+    pnp_2->grasp_object(arm_1_state.object.collisionObject);
+  }
 
-  arm_1_state.pose.orientation.x = object.pose.orientation.w;
-  arm_1_state.pose.orientation.y = object.pose.orientation.z;
-  arm_1_state.pose.orientation.z = 0;
-  arm_1_state.pose.orientation.w = 0;
+  plan_and_move(arm_1_state, ROBOT_STATE::PREMOVE, kinematic_state, 1, panda_1_arm, tray);
+
+  plan_and_move(arm_1_state, ROBOT_STATE::MOVE, kinematic_state, 1, panda_1_arm, tray);
+
+  plan_and_move(arm_1_state, ROBOT_STATE::PUTDOWN, kinematic_state, 1, panda_1_arm, tray);
+
+  if(s == 1){
+    pnp_1->release_object(arm_1_state.object.collisionObject);
+  }else if(s == 2){
+    pnp_2->release_object(arm_1_state.object.collisionObject);
+  } 
+  
+  plan_and_move(arm_1_state, ROBOT_STATE::POSTMOVE, kinematic_state, 1, panda_1_arm, tray);
+
+  return true;
+}
+
+
+
+bool plan_and_move(arm_state &arm_1_state, ROBOT_STATE movement, moveit::core::RobotStatePtr kinematic_state,
+                   double timeout, moveit::planning_interface::MoveGroupInterface &panda_arm, tray_helper *active_tray)
+{
+  thread_local int cache_1;
+
+  if (movement == ROBOT_STATE::PREGRASP)
+  {
+    RCLCPP_INFO(LOGGER, "[Movement type pregrasp]");
+    arm_1_state.pose.position.x = arm_1_state.object.collisionObject.pose.position.x;
+    arm_1_state.pose.position.y = arm_1_state.object.collisionObject.pose.position.y;
+    arm_1_state.pose.position.z = arm_1_state.object.collisionObject.pose.position.z + 0.25;
+
+    arm_1_state.pose.orientation.x = arm_1_state.object.collisionObject.pose.orientation.w;
+    arm_1_state.pose.orientation.y = arm_1_state.object.collisionObject.pose.orientation.z;
+    arm_1_state.pose.orientation.z = 0;
+    arm_1_state.pose.orientation.w = 0;
+  }
+  else if (movement == ROBOT_STATE::GRASP)
+  {
+    RCLCPP_INFO(LOGGER, "[Movement type grasp]");
+    arm_1_state.pose.position.z = arm_1_state.object.collisionObject.pose.position.z + 0.1;
+  }
+  else if (movement == ROBOT_STATE::PREMOVE)
+  {
+    RCLCPP_INFO(LOGGER, "[Movement type pre move]");
+    arm_1_state.pose.position.z = arm_1_state.object.collisionObject.pose.position.z + 0.25;
+  }
+  else if (movement == ROBOT_STATE::MOVE)
+  {
+    RCLCPP_INFO(LOGGER, "[Movement type move]");
+    arm_1_state.pose.position.x = active_tray->get_x();
+    arm_1_state.pose.position.y = active_tray->get_y();
+    arm_1_state.pose.position.z = 1.28 + active_tray->z * 0.05;
+
+    arm_1_state.pose.orientation.x = 1;
+    arm_1_state.pose.orientation.y = 0;
+
+    cache_1 = active_tray->z * 0.05;
+
+    active_tray->next();
+  }
+  else if (movement == ROBOT_STATE::PUTDOWN)
+  {
+    RCLCPP_INFO(LOGGER, "[Movement type putdown move]");
+    arm_1_state.pose.position.z = 1.141 + cache_1;
+  }
+  else if (movement == ROBOT_STATE::POSTMOVE)
+  {
+    RCLCPP_INFO(LOGGER, "[Movement type post move]");
+    arm_1_state.pose.position.z = 1.28 + cache_1;
+  }
 
   bool executionSuccessful = false;
+  int counter = 0;
 
-  RCLCPP_INFO(LOGGER, "Set from ik done ");
-
-  thread_local int counter = 0;
-  
   while (!executionSuccessful)
   {
-
-    bool a_bot_found_ik = kinematic_state->setFromIK(arm_1_state.arm_joint_model_group, arm_1_state.pose, 0.1);
-
-    RCLCPP_INFO(LOGGER, "Starting pregrasp execution ");
-
+    bool a_bot_found_ik = kinematic_state->setFromIK(arm_1_state.arm_joint_model_group, arm_1_state.pose, timeout);
+      
     if (a_bot_found_ik)
     {
       kinematic_state->copyJointGroupPositions(arm_1_state.arm_joint_model_group, arm_1_state.arm_joint_values);
-      panda_1_arm.setJointValueTarget(arm_1_state.arm_joint_names, arm_1_state.arm_joint_values);
-      RCLCPP_INFO(LOGGER, "IK found for arm %d", s);
-    }else{
-      continue;
+      panda_arm.setJointValueTarget(arm_1_state.arm_joint_names, arm_1_state.arm_joint_values);
+      RCLCPP_INFO(LOGGER, "IK found for arm 1");
     }
-    
+
     moveit::planning_interface::MoveGroupInterface::Plan my_plan;
     if (a_bot_found_ik)
     {
-      bool success = (panda_1_arm.plan(my_plan) == moveit::core::MoveItErrorCode::SUCCESS);
-      if(success){
-        RCLCPP_INFO(LOGGER, "pregrasp planning successful");
-      }
-      if (!success || my_plan.trajectory_.joint_trajectory.points.size() == 0)
-      {
-        if(s == 1){
-          pnp_1->home();
-        }else if(s == 2){
-          pnp_2->home();
-        }
-        RCLCPP_INFO(LOGGER, "Plan did not succeed");
+      executionSuccessful = panda_arm.move() == moveit::core::MoveItErrorCode::SUCCESS;
+      if(!executionSuccessful){
+        objs.push(arm_1_state.object);
+        //pnp_1->open_gripper();
         return false;
       }
-      executionSuccessful = panda_1_arm.execute(my_plan) == moveit::core::MoveItErrorCode::SUCCESS;
     }
-
-    if(!executionSuccessful){
-      if (counter > 2){
-        // pre move
-        if(s == 1){
-          pnp_1->home();
-          counter = 0;
-        }else if(s == 2){
-          pnp_2->home();
-          counter = 0;
-        }
+    else
+    {
+      if (movement == ROBOT_STATE::PREGRASP || movement == ROBOT_STATE::GRASP)
+      {
+        objs.push(arm_1_state.object);
         return false;
       }
-      counter++;
     }
   }
-
-
-  // Grasp
-  if(s == 1){
-    robot_1_state = ROBOT_STATE::GRASP;
-  }else if(s == 2){
-    robot_2_state = ROBOT_STATE::GRASP;
-  }
-
-  arm_1_state.pose.position.z = object.pose.position.z + 0.1;
-
-  executionSuccessful = false;
-  
-  while (!executionSuccessful)
-  {
-
-    bool a_bot_found_ik = kinematic_state->setFromIK(arm_1_state.arm_joint_model_group, arm_1_state.pose, 0.1);
-
-    RCLCPP_INFO(LOGGER, "Starting grasp execution ");
-
-    if (a_bot_found_ik)
-    {
-      kinematic_state->copyJointGroupPositions(arm_1_state.arm_joint_model_group, arm_1_state.arm_joint_values);
-      panda_1_arm.setJointValueTarget(arm_1_state.arm_joint_names, arm_1_state.arm_joint_values);
-      RCLCPP_INFO(LOGGER, "IK found for arm %d", s);
-    }else{
-      continue;
-    }
-    
-    moveit::planning_interface::MoveGroupInterface::Plan my_plan;
-    if (a_bot_found_ik)
-    {
-      bool success = (panda_1_arm.plan(my_plan) == moveit::core::MoveItErrorCode::SUCCESS);
-      if(success){
-        RCLCPP_INFO(LOGGER, "grasp planning successful");
-      }
-      if (!success || my_plan.trajectory_.joint_trajectory.points.size() == 0)
-      {
-        if(s == 1){
-          pnp_1->home();
-        }else if(s == 2){
-          pnp_2->home();
-        }
-        RCLCPP_INFO(LOGGER, "Plan did not succeed");
-        return false;
-      }
-      executionSuccessful = panda_1_arm.execute(my_plan) == moveit::core::MoveItErrorCode::SUCCESS;
-    }
-
-    if(!executionSuccessful){
-      if (counter > 3){
-        // pre move
-        if(s == 1){
-          pnp_1->home();
-        }else if(s == 2){
-          pnp_2->home();
-        }
-        return false;
-      }
-      counter++;
-    }
-  }
-
-
-  // pre move
-  if(s == 1){
-    robot_1_state = ROBOT_STATE::PREMOVE;
-  }else if(s == 2){
-    robot_2_state = ROBOT_STATE::PREMOVE;
-  }
-
-  if(s == 1){
-    pnp_1->grasp_object(object);
-  }else if(s == 2){
-    pnp_2->grasp_object(object);
-  }
-
-  arm_1_state.pose.position.z = object.pose.position.z + 0.25;
-
-  executionSuccessful = false;
-  
-  while (!executionSuccessful)
-  {
-
-    bool a_bot_found_ik = kinematic_state->setFromIK(arm_1_state.arm_joint_model_group, arm_1_state.pose, 0.1);
-
-    RCLCPP_INFO(LOGGER, "Starting premove execution ");
-
-    if (a_bot_found_ik)
-    {
-      kinematic_state->copyJointGroupPositions(arm_1_state.arm_joint_model_group, arm_1_state.arm_joint_values);
-      panda_1_arm.setJointValueTarget(arm_1_state.arm_joint_names, arm_1_state.arm_joint_values);
-      RCLCPP_INFO(LOGGER, "IK found for arm %d", s);
-    }else{
-      continue;
-    }
-    
-    moveit::planning_interface::MoveGroupInterface::Plan my_plan;
-    if (a_bot_found_ik)
-    {
-      bool success = (panda_1_arm.plan(my_plan) == moveit::core::MoveItErrorCode::SUCCESS);
-      if(success){
-        RCLCPP_INFO(LOGGER, "premove planning successful");
-      }
-      if (!success || my_plan.trajectory_.joint_trajectory.points.size() == 0)
-      {
-        RCLCPP_INFO(LOGGER, "Plan did not succeed");
-        continue;
-      }
-      executionSuccessful = panda_1_arm.execute(my_plan) == moveit::core::MoveItErrorCode::SUCCESS;
-    }
-  }
-
-  // Move
-  if(s == 1){
-    robot_1_state = ROBOT_STATE::MOVE;
-  }else if(s == 2){
-    robot_2_state = ROBOT_STATE::MOVE;
-  }
-
-  arm_1_state.pose.position.x = tray->get_x();
-  arm_1_state.pose.position.y = tray->get_y();
-  arm_1_state.pose.position.z = 1.28 + tray->z * 0.05;
-
-  arm_1_state.pose.orientation.x = 1;
-  arm_1_state.pose.orientation.y = 0;
-
-  executionSuccessful = false;
-  
-  while (!executionSuccessful)
-  {
-
-    bool a_bot_found_ik = kinematic_state->setFromIK(arm_1_state.arm_joint_model_group, arm_1_state.pose, 0.1);
-
-    RCLCPP_INFO(LOGGER, "Starting premove execution ");
-
-    if (a_bot_found_ik)
-    {
-      kinematic_state->copyJointGroupPositions(arm_1_state.arm_joint_model_group, arm_1_state.arm_joint_values);
-      panda_1_arm.setJointValueTarget(arm_1_state.arm_joint_names, arm_1_state.arm_joint_values);
-      RCLCPP_INFO(LOGGER, "IK found for arm %d", s);
-    }else{
-      continue;
-    }
-    
-    moveit::planning_interface::MoveGroupInterface::Plan my_plan;
-    if (a_bot_found_ik)
-    {
-      bool success = (panda_1_arm.plan(my_plan) == moveit::core::MoveItErrorCode::SUCCESS);
-      if(success){
-        RCLCPP_INFO(LOGGER, "premove planning successful");
-      }
-      if (!success || my_plan.trajectory_.joint_trajectory.points.size() == 0)
-      {
-        RCLCPP_INFO(LOGGER, "Plan did not succeed");
-        continue;
-      }
-      executionSuccessful = panda_1_arm.execute(my_plan) == moveit::core::MoveItErrorCode::SUCCESS;
-    }
-  }
-  // Put down
-  arm_1_state.pose.position.z = 1.141 + tray->z * 0.05;
-
-  executionSuccessful = false;
-  
-  while (!executionSuccessful)
-  {
-
-    bool a_bot_found_ik = kinematic_state->setFromIK(arm_1_state.arm_joint_model_group, arm_1_state.pose, 0.1);
-
-    RCLCPP_INFO(LOGGER, "Starting premove execution ");
-
-    if (a_bot_found_ik)
-    {
-      kinematic_state->copyJointGroupPositions(arm_1_state.arm_joint_model_group, arm_1_state.arm_joint_values);
-      panda_1_arm.setJointValueTarget(arm_1_state.arm_joint_names, arm_1_state.arm_joint_values);
-      RCLCPP_INFO(LOGGER, "IK found for arm %d", s);
-    }else{
-      continue;
-    }
-    
-    moveit::planning_interface::MoveGroupInterface::Plan my_plan;
-    if (a_bot_found_ik)
-    {
-      bool success = (panda_1_arm.plan(my_plan) == moveit::core::MoveItErrorCode::SUCCESS);
-      if(success){
-        RCLCPP_INFO(LOGGER, "premove planning successful");
-      }
-      if (!success || my_plan.trajectory_.joint_trajectory.points.size() == 0)
-      {
-        RCLCPP_INFO(LOGGER, "Plan did not succeed");
-        continue;
-      }
-      executionSuccessful = panda_1_arm.execute(my_plan) == moveit::core::MoveItErrorCode::SUCCESS;
-    }
-  }
-
-  if(s == 1){
-    pnp_1->release_object(object);
-  }else if(s == 2){
-    pnp_2->release_object(object);
-  }
-  // Post Move
-  if(s == 1){
-    robot_1_state = ROBOT_STATE::POSTMOVE;
-  }else if(s == 2){
-    robot_2_state = ROBOT_STATE::POSTMOVE;
-  }
-
-  arm_1_state.pose.position.z = 1.28 + tray->z * 0.05;
-
-  executionSuccessful = false;
-  
-  while (!executionSuccessful)
-  {
-
-    bool a_bot_found_ik = kinematic_state->setFromIK(arm_1_state.arm_joint_model_group, arm_1_state.pose, 0.1);
-
-    RCLCPP_INFO(LOGGER, "Starting premove execution ");
-
-    if (a_bot_found_ik)
-    {
-      kinematic_state->copyJointGroupPositions(arm_1_state.arm_joint_model_group, arm_1_state.arm_joint_values);
-      panda_1_arm.setJointValueTarget(arm_1_state.arm_joint_names, arm_1_state.arm_joint_values);
-      RCLCPP_INFO(LOGGER, "IK found for arm %d", s);
-    }else{
-      continue;
-    }
-    
-    moveit::planning_interface::MoveGroupInterface::Plan my_plan;
-    if (a_bot_found_ik)
-    {
-      bool success = (panda_1_arm.plan(my_plan) == moveit::core::MoveItErrorCode::SUCCESS);
-      if(success){
-        RCLCPP_INFO(LOGGER, "premove planning successful");
-      }
-      if (!success || my_plan.trajectory_.joint_trajectory.points.size() == 0)
-      {
-        RCLCPP_INFO(LOGGER, "Plan did not succeed");
-        continue;
-      }
-      executionSuccessful = panda_1_arm.execute(my_plan) == moveit::core::MoveItErrorCode::SUCCESS;
-      if(!executionSuccessful)
-      {
-        if(s == 1){
-          pnp_1->release_object(object);
-        }else if(s == 2){
-          pnp_2->release_object(object);
-        }
-      }
-    }
-  }
-  
-  tray->next();
-
   return true;
 }
