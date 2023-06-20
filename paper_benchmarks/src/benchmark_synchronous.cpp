@@ -149,7 +149,7 @@ void main_thread()
     
     bool execute_one =  objs.get_execute_one(); 
     
-    arm_system.arm_1.object = objs.pop("robot_1", "random", e);
+    arm_system.arm_1.object = objs.pop("robot_1", "", e);
 
     execute_one = execute_one | objs.empty(); // if last item was the one picked
 
@@ -183,7 +183,7 @@ void main_thread()
       e.y = point_x.pose.position.y;
       e.z = point_x.pose.position.z;
 
-      arm_system.arm_2.object = objs.pop("robot_2", "random", e);
+      arm_system.arm_2.object = objs.pop("robot_2", "", e);
 
       RCLCPP_INFO(LOGGER, "[object id %s ]", arm_system.arm_2.object.collisionObject.id.c_str());
 
@@ -235,8 +235,8 @@ void main_thread()
     plan_and_move(arm_system, Movement::RANDOM_1, kinematic_state, 1, dual_arm,
                   active_tray_arm_1, active_tray_arm_2, execute_one, robot_1_color.compare("BLUE") == 0, robot_2_color.compare("BLUE") == 0);
 
-    plan_and_move(arm_system, Movement::RANDOM_1, kinematic_state, 1, dual_arm,
-                  active_tray_arm_1, active_tray_arm_2, execute_one, robot_1_color.compare("BLUE") == 0, robot_2_color.compare("BLUE") == 0);
+    //plan_and_move(arm_system, Movement::RANDOM_1, kinematic_state, 1, dual_arm,
+    //              active_tray_arm_1, active_tray_arm_2, execute_one, robot_1_color.compare("BLUE") == 0, robot_2_color.compare("BLUE") == 0);
  
 
     plan_and_move(arm_system, Movement::PUTDOWN, kinematic_state, 1, dual_arm,
@@ -370,6 +370,10 @@ bool plan_and_move(dual_arm_state &arm_system, Movement movement, moveit::core::
 
     if(right){
       arm_system.arm_2.pose.position.z = 1.48 + cache_2;
+    }
+
+    if(left || right){
+      std::this_thread::sleep_for(5.0s);
     }
   }
 

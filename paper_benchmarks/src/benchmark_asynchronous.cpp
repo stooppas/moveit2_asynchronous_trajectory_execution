@@ -132,10 +132,10 @@ void add_objects_to_planning_scene(){
       for(int i = 0; i < amount_to_appear; i++){
         publisher_->publish(message);
       }
-      std::this_thread::sleep_for(10.0s);
+      std::this_thread::sleep_for(20.0s);
 
     }else{
-      std::this_thread::sleep_for(3.0s);
+      std::this_thread::sleep_for(10.0s);
     }
 
     if (amount_to_appear == 0)
@@ -153,7 +153,7 @@ void main_thread_arm(std::shared_ptr<primitive_pick_and_place> pnp, std::string 
   moveit::planning_interface::MoveGroupInterface panda_arm(node, robot_arm);
   panda_arm.setMaxVelocityScalingFactor(0.50);
   panda_arm.setMaxAccelerationScalingFactor(0.50);
-  panda_arm.setNumPlanningAttempts(20);
+  panda_arm.setNumPlanningAttempts(5);
   panda_arm.setPlanningTime(1);
 
   moveit::core::RobotModelConstPtr kinematic_model = panda_arm.getRobotModel();
@@ -338,12 +338,12 @@ bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interfac
   }
   plan_and_move(arm_1_state, ROBOT_STATE::MOVE, kinematic_state, 1, panda_1_arm, tray, s);
 
-  // Task differentiation based on the color
-  if (color.compare("BLUE") == 0){ 
-    plan_and_move(arm_1_state, ROBOT_STATE::RANDOM_1, kinematic_state, 1, panda_1_arm, tray, s);
+  // // Task differentiation based on the color
+  // if (color.compare("BLUE") == 0){ 
+  //   plan_and_move(arm_1_state, ROBOT_STATE::RANDOM_1, kinematic_state, 1, panda_1_arm, tray, s);
 
-    plan_and_move(arm_1_state, ROBOT_STATE::RANDOM_2, kinematic_state, 1, panda_1_arm, tray, s);
-  }
+  //   //plan_and_move(arm_1_state, ROBOT_STATE::RANDOM_2, kinematic_state, 1, panda_1_arm, tray, s);
+  // }
 
 
   if(s == 1){
@@ -423,11 +423,12 @@ bool plan_and_move(arm_state &arm_1_state, ROBOT_STATE movement, moveit::core::R
     arm_1_state.pose.position.z = 1.28 + cache_1;
   }
 
-  else if (movement == ROBOT_STATE::RANDOM_1)
-  {
-    RCLCPP_INFO(LOGGER, "[Movement type random 1]");
-    arm_1_state.pose.position.z = 1.48 + cache_1;
-  }
+  // else if (movement == ROBOT_STATE::RANDOM_1)
+  // {
+  //   RCLCPP_INFO(LOGGER, "[Movement type random 1]");
+  //   arm_1_state.pose.position.z = 1.48 + cache_1;
+  //   std::this_thread::sleep_for(5.0s);
+  // }
 
   else if (movement == ROBOT_STATE::RANDOM_2)
   {
