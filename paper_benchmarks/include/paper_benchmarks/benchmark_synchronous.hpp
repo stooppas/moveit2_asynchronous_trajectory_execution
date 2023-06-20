@@ -48,7 +48,9 @@ enum Movement
     PREMOVE,
     MOVE,
     PUTDOWN,
-    POSTMOVE
+    POSTMOVE,
+    RANDOM_1,
+    RANDOM_2
 };
 
 struct dual_arm_state
@@ -65,6 +67,6 @@ bool update_scene_called_once = false;
 
 bool plan_and_move(dual_arm_state &arm_system, Movement movement, moveit::core::RobotStatePtr kinematic_state,
                    double timeout, moveit::planning_interface::MoveGroupInterface &dual_arm, tray_helper *active_tray_arm_1,
-                   tray_helper *active_tray_arm_2, bool executeOneOnly);
+                   tray_helper *active_tray_arm_2, bool executeOneOnly, bool left, bool right);
 
 #endif

@@ -455,6 +455,8 @@ bool plan_and_move(arm_state &arm_1_state, ROBOT_STATE movement, moveit::core::R
       executionSuccessful = panda_arm.move() == moveit::core::MoveItErrorCode::SUCCESS;
       if(!executionSuccessful){
         objs.push(arm_1_state.object);
+
+        // most cases move fails because of the gripper not opening
         if(s == 1){
           pnp_1->open_gripper();
         }else if(s == 2){

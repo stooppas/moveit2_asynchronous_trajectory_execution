@@ -161,10 +161,17 @@ void main_thread()
 
     RCLCPP_INFO(LOGGER, "Size colors %li", colors.size());
 
-    if (colors[object_1_id].color.r == 1 && colors[object_1_id].color.g == 0 && colors[object_1_id].color.b == 0)
+    std::string robot_1_color;
+    std::string robot_2_color;
+
+    if (colors[object_1_id].color.r == 1 && colors[object_1_id].color.g == 0 && colors[object_1_id].color.b == 0){
       active_tray_arm_1 = &red_tray_1;
-    else if (colors[object_1_id].color.r == 0 && colors[object_1_id].color.g == 0 && colors[object_1_id].color.b == 1)
+      robot_1_color = "RED";
+    }
+    else if (colors[object_1_id].color.r == 0 && colors[object_1_id].color.g == 0 && colors[object_1_id].color.b == 1){
       active_tray_arm_1 = &blue_tray_1;
+      robot_1_color = "BLUE";
+    }
     else{
       continue;
     }
@@ -182,17 +189,20 @@ void main_thread()
 
       auto object_2_id = arm_system.arm_2.object.collisionObject.id;
 
-      if (colors[object_2_id].color.r == 1 && colors[object_2_id].color.g == 0 && colors[object_2_id].color.b == 0)
+      if (colors[object_2_id].color.r == 1 && colors[object_2_id].color.g == 0 && colors[object_2_id].color.b == 0){
         active_tray_arm_2 = &red_tray_2;
-      else if (colors[object_2_id].color.r == 0 && colors[object_2_id].color.g == 0 && colors[object_2_id].color.b == 1)
+        robot_2_color = "RED";
+      }
+      else if (colors[object_2_id].color.r == 0 && colors[object_2_id].color.g == 0 && colors[object_2_id].color.b == 1){
         active_tray_arm_2 = &blue_tray_2;
+        robot_2_color = "BLUE";
+      }
       else
         continue;
     }
     
-    
     bool success = plan_and_move(arm_system, Movement::PREGRASP, kinematic_state, 1, dual_arm,
-                                 active_tray_arm_1, active_tray_arm_2, execute_one);
+                                 active_tray_arm_1, active_tray_arm_2, execute_one, false, false);
     if (!success)
     {
       continue;
@@ -202,7 +212,7 @@ void main_thread()
     // pnp_2->open_gripper();
 
     success = plan_and_move(arm_system, Movement::GRASP, kinematic_state, 1, dual_arm,
-                            active_tray_arm_1, active_tray_arm_2, execute_one);
+                            active_tray_arm_1, active_tray_arm_2, execute_one, false, false);
     if (!success)
     {
       continue;
@@ -216,13 +226,21 @@ void main_thread()
     }
 
     plan_and_move(arm_system, Movement::PREMOVE, kinematic_state, 1, dual_arm,
-                  active_tray_arm_1, active_tray_arm_2, execute_one);
+                  active_tray_arm_1, active_tray_arm_2, execute_one, false, false);
 
     plan_and_move(arm_system, Movement::MOVE, kinematic_state, 1, dual_arm,
-                  active_tray_arm_1, active_tray_arm_2, execute_one);
+                  active_tray_arm_1, active_tray_arm_2, execute_one, false, false);
+
+    // Task differentiation based on the color
+    plan_and_move(arm_system, Movement::RANDOM_1, kinematic_state, 1, dual_arm,
+                  active_tray_arm_1, active_tray_arm_2, execute_one, robot_1_color.compare("BLUE") == 0, robot_2_color.compare("BLUE") == 0);
+
+    plan_and_move(arm_system, Movement::RANDOM_1, kinematic_state, 1, dual_arm,
+                  active_tray_arm_1, active_tray_arm_2, execute_one, robot_1_color.compare("BLUE") == 0, robot_2_color.compare("BLUE") == 0);
+ 
 
     plan_and_move(arm_system, Movement::PUTDOWN, kinematic_state, 1, dual_arm,
-                  active_tray_arm_1, active_tray_arm_2, execute_one);
+                  active_tray_arm_1, active_tray_arm_2, execute_one, false, false);
 
     pnp_1->release_object(arm_system.arm_1.object.collisionObject);
 
@@ -231,7 +249,7 @@ void main_thread()
     }
 
     plan_and_move(arm_system, Movement::POSTMOVE, kinematic_state, 1, dual_arm,
-                  active_tray_arm_1, active_tray_arm_2, execute_one);
+                  active_tray_arm_1, active_tray_arm_2, execute_one, false, false);
 
    
     runner1.increment();
@@ -250,7 +268,7 @@ void main_thread()
 
 bool plan_and_move(dual_arm_state &arm_system, Movement movement, moveit::core::RobotStatePtr kinematic_state,
                    double timeout, moveit::planning_interface::MoveGroupInterface &dual_arm, tray_helper *active_tray_arm_1,
-                   tray_helper *active_tray_arm_2, bool executeOneOnly)
+                   tray_helper *active_tray_arm_2, bool executeOneOnly, bool left, bool right)
 {
   static int cache_1;
   static int cache_2;
@@ -341,6 +359,29 @@ bool plan_and_move(dual_arm_state &arm_system, Movement movement, moveit::core::
 
     if(!executeOneOnly){
       arm_system.arm_2.pose.position.z = 1.28 + cache_2;
+    }
+  }
+  else if (movement == Movement::RANDOM_1)
+  {
+    if(left){
+      RCLCPP_INFO(LOGGER, "[Movement type random 1]");
+      arm_system.arm_1.pose.position.z = 1.48 + cache_2;
+    }
+
+    if(right){
+      arm_system.arm_2.pose.position.z = 1.48 + cache_2;
+    }
+  }
+
+  else if (movement == Movement::RANDOM_2)
+  {
+    if(left){
+      RCLCPP_INFO(LOGGER, "[Movement type random 1]");
+      arm_system.arm_1.pose.position.z = 1.48 + cache_2;
+    }
+
+    if(right){
+      arm_system.arm_2.pose.position.z = 1.48 + cache_2;
     }
   }
 
