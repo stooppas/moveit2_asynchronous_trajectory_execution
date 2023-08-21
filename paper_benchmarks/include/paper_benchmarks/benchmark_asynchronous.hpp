@@ -6,6 +6,8 @@
 #include "paper_benchmarks/scene.hpp"
 #include "paper_benchmarks/primitive_pick_and_place.hpp"
 #include <chrono>
+#include "std_msgs/msg/string.hpp"
+#include "paper_benchmarks/cube_selector.hpp"
 
 using namespace std::chrono_literals;
 
@@ -23,6 +25,35 @@ bool panda_2_busy = false;
 
 const rclcpp::Logger LOGGER = rclcpp::get_logger("benchmark_asynchronous");
 void main_thread();
+void update_planning_scene();
 bool executeTrajectory(std::shared_ptr<primitive_pick_and_place> pnp,moveit_msgs::msg::CollisionObject& object,tray_helper* tray);
+
+rclcpp::Publisher<std_msgs::msg::String>::SharedPtr publisher_;
+std::vector<std::string> all_objects;
+Point3D e(0,0,0);
+ThreadSafeCubeQueue objs(e);
+
+std::map<std::string, moveit_msgs::msg::CollisionObject> objMap;
+std::map<std::string, moveit_msgs::msg::ObjectColor> colors;
+bool update_scene_called_once = false;
+
+void planning_thread();
+
+struct arm_state
+{
+    const moveit::core::JointModelGroup *arm_joint_model_group;
+    const std::vector<std::string> &arm_joint_names;
+    std::vector<double> arm_joint_values;
+    geometry_msgs::msg::Pose pose;
+    CollisionPlanningObject object;
+
+    arm_state(const moveit::core::JointModelGroup *jmg) : arm_joint_model_group(jmg), arm_joint_names(jmg->getVariableNames()) {}
+};
+bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interface::MoveGroupInterface &panda_1_arm,  
+  moveit::core::RobotModelConstPtr kinematic_model, moveit::core::RobotStatePtr kinematic_state, 
+  moveit_msgs::msg::CollisionObject &object, tray_helper *tray, int s, std::string color);
+
+void main_thread_arm(std::shared_ptr<primitive_pick_and_place> pnp, std::string robot_arm);
+
 
 #endif

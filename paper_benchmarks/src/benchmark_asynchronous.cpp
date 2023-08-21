@@ -1,157 +1,479 @@
 #include "paper_benchmarks/benchmark_asynchronous.hpp"
+#include <thread>
+#include <iostream>
+#include <string>
+#include "std_msgs/msg/string.hpp"
+#include "paper_benchmarks/cube_selector.hpp"
 
 using namespace std::chrono_literals;
 
-int main(int argc, char** argv)
+void add_objects_to_planning_scene();
+
+enum ROBOT_STATE{
+  PREGRASP,
+  GRASP,
+  PREMOVE,
+  MOVE,
+  PUTDOWN,
+  POSTMOVE,
+  RANDOM_1,
+  RANDOM_2
+};
+
+bool plan_and_move(arm_state &arm_1_state, ROBOT_STATE movement, moveit::core::RobotStatePtr kinematic_state,
+                   double timeout, moveit::planning_interface::MoveGroupInterface &panda_arm, tray_helper *active_tray, int s);
+
+ROBOT_STATE robot_1_state;
+ROBOT_STATE robot_2_state;
+
+volatile int number_of_test_cases = 5;
+
+static struct runner{
+  int counter = 0;
+  std::mutex mtx;
+
+  void increment(){
+    std::lock_guard<std::mutex> lock(mtx);
+    counter++;
+  }
+
+  int check(){
+    std::lock_guard<std::mutex> lock(mtx);
+    return counter;
+  }
+} runner2;
+
+int main(int argc, char **argv)
 {
-  rclcpp::init(argc,argv);
+  rclcpp::init(argc, argv);
 
   node = std::make_shared<rclcpp::Node>("benchmark_asynchronous");
 
-  pnp_1 = std::make_shared<primitive_pick_and_place>(node,"panda_1");
-  pnp_2 = std::make_shared<primitive_pick_and_place>(node,"panda_2");
+  node->declare_parameter("launchType", "randomDistance");
+  node->declare_parameter("cubesToPick", 5);
 
-  new std::thread(main_thread);
+  std::string distanceType = node->get_parameter("launchType").as_string();
+  
+  number_of_test_cases = node->get_parameter("cubesToPick").as_int();
+
+  RCLCPP_INFO(LOGGER, "launch: %s", distanceType.c_str());
+
+  pnp_1 = std::make_shared<primitive_pick_and_place>(node, "panda_1");
+  pnp_2 = std::make_shared<primitive_pick_and_place>(node, "panda_2");
+  
+  publisher_ = node->create_publisher<std_msgs::msg::String>("spawnNewCube", 10);
+
+  new std::thread(update_planning_scene);
+
+  new std::thread(add_objects_to_planning_scene);
+
+  std::thread t_1(main_thread_arm, pnp_1, "panda_1");
+  std::thread t_2(main_thread_arm, pnp_2, "panda_2");
 
   rclcpp::spin(node);
+
+  t_1.join();
+  t_2.join();
   rclcpp::shutdown();
 }
 
-void main_thread()
-{ 
-  rclcpp::Rate r(5);
+void update_planning_scene()
+{
 
-  pnp_1->home();
-  pnp_2->home();
+  while (true)
+  {
 
-  auto objMap = pnp_1->getCollisionObjects();
+    objMap = pnp_1->getCollisionObjects();
+    colors = pnp_1->getCollisionObjectColors();
 
-  std::vector<moveit_msgs::msg::CollisionObject> objs;
-  for(const auto &obj : objMap)objs.push_back(obj.second);
-  std::random_shuffle(objs.begin(),objs.end());
+    for (auto &pair : objMap)
+    {
+      auto it = std::find(all_objects.begin(), all_objects.end(), pair.second.id);
 
-  auto colors = pnp_1->getCollisionObjectColors();
+      // not found in the object list
+      if (it == all_objects.end())
+      {
+        all_objects.push_back(pair.second.id);
 
-  RCLCPP_INFO(LOGGER,"Size: %i",objs.size());
+        CollisionPlanningObject new_object(pair.second, 0, 0);
+        objs.push(new_object);
+
+        RCLCPP_INFO(LOGGER, "New object detected. id: %s", pair.second.id.c_str());
+      }
+    }
+
+    std::this_thread::sleep_for(1.0s);
+    update_scene_called_once = true;
+  }
+}
+
+
+void add_objects_to_planning_scene(){
+
+  while(true){
+
+    while (!update_scene_called_once)
+    {
+      std::this_thread::sleep_for(1.0s);
+    }
+
+    if(robot_1_state == ROBOT_STATE::PREGRASP || robot_1_state == ROBOT_STATE::GRASP  || robot_1_state == ROBOT_STATE::PREMOVE|| 
+       robot_2_state == ROBOT_STATE::PREGRASP || robot_2_state == ROBOT_STATE::GRASP || robot_2_state == ROBOT_STATE::PREMOVE )
+    {
+      std::this_thread::sleep_for(0.5s);
+      continue;
+    } 
+
+    int amount_to_appear = std::min( number_of_test_cases - int(objs.size()) - runner2.check(), 8);
+
+    if(objs.size() < 6)
+    {
+      auto message = std_msgs::msg::String();
+      for(int i = 0; i < amount_to_appear; i++){
+        publisher_->publish(message);
+      }
+      std::this_thread::sleep_for(20.0s);
+
+    }else{
+      std::this_thread::sleep_for(10.0s);
+    }
+
+    if (amount_to_appear == 0)
+      break;
+
+  }
+}
+
+
+void main_thread_arm(std::shared_ptr<primitive_pick_and_place> pnp, std::string robot_arm){
+
+  pnp->home();
+  pnp->open_gripper();
+
+  moveit::planning_interface::MoveGroupInterface panda_arm(node, robot_arm);
+  panda_arm.setMaxVelocityScalingFactor(0.50);
+  panda_arm.setMaxAccelerationScalingFactor(0.50);
+  panda_arm.setNumPlanningAttempts(5);
+  panda_arm.setPlanningTime(1);
+
+  moveit::core::RobotModelConstPtr kinematic_model = panda_arm.getRobotModel();
+  moveit::core::RobotStatePtr kinematic_state = panda_arm.getCurrentState();
+
+  arm_state arm_s(kinematic_model->getJointModelGroup(robot_arm));
+
+  while (!update_scene_called_once)
+  {
+    std::this_thread::sleep_for(1.0s);
+  }
+
+  RCLCPP_INFO(LOGGER, "Size: %li", objs.size());
 
   int i = 0;
 
-  auto it = objs.begin();
+  RCLCPP_INFO(LOGGER, "[checkpoint] Starting execution");
 
-  while(it != objs.end()){
-    if(!panda_1_busy || !panda_2_busy){
-      auto active_object = *it;
-      auto object_id = (*it).id;
-      RCLCPP_INFO(LOGGER,"Object: %s",object_id.c_str());
+  std::string curren_planning_robot;
 
-      //Check if the object is a box
-      if(object_id.rfind("box",0) != 0){
-        it++;
+  while(!objs.empty()){
+    CollisionPlanningObject current_object;
+    std::string color;
+
+    // change end effector position based on the robot available
+
+    // we need to get position of the tool tip
+    if (robot_arm.compare("panda_1") == 0)
+    {
+      geometry_msgs::msg::PoseStamped point_x = panda_arm.getCurrentPose("panda_1_leftfinger");
+      // e.x = 0;
+      // e.y = -0.5;
+      // e.z = 1;
+      e.x = point_x.pose.position.x;
+      e.y = point_x.pose.position.y;
+      e.z = point_x.pose.position.z;
+      curren_planning_robot = "robot_1";
+    }
+    else //(!planned_for_panda_2)
+    {
+      geometry_msgs::msg::PoseStamped point_x = panda_arm.getCurrentPose("panda_2_leftfinger");
+      // e.x = 0;
+      // e.y = 0.5;
+      // e.z = 1;
+      e.x = point_x.pose.position.x;
+      e.y = point_x.pose.position.y;
+      e.z = point_x.pose.position.z;
+      curren_planning_robot = "robot_2";
+    }
+
+    current_object = objs.pop(curren_planning_robot, "", e);
+    
+    auto object_id = current_object.collisionObject.id;
+    RCLCPP_INFO(LOGGER, "Object: %s", object_id.c_str());
+
+    // Check if the object is a box
+    if (object_id.rfind("box", 0) != 0)
+    {
+      continue;
+    }
+ 
+    // plan for if the arm one is not busy
+    tray_helper *active_tray;
+    if (robot_arm.compare("panda_1") == 0)
+    {
+      if (colors[object_id].color.r == 1 && colors[object_id].color.g == 0 && colors[object_id].color.b == 0){
+        active_tray = &red_tray_1;
+        color = "RED";
+      }
+      else if (colors[object_id].color.r == 0 && colors[object_id].color.g == 0 && colors[object_id].color.b == 1){
+        active_tray = &blue_tray_1;
+        color = "BLUE";
+      }
+      else
         continue;
+    }
+    else //(!planned_for_panda_2)
+    {
+      if (colors[object_id].color.r == 1 && colors[object_id].color.g == 0 && colors[object_id].color.b == 0){
+        active_tray = &red_tray_2;
+        color = "RED";
       }
+      else if (colors[object_id].color.r == 0 && colors[object_id].color.g == 0 && colors[object_id].color.b == 1){
+        active_tray = &blue_tray_2;
+        color = "BLUE";
+      }
+      else
+        continue;
+    }
+    
+    
+    auto current_object_1 = std::move(current_object);
 
-      if(!panda_1_busy)
-      {
-        tray_helper* active_tray;
-        if(colors[object_id].color.r == 1 && colors[object_id].color.g == 0 && colors[object_id].color.b == 0)active_tray = &red_tray_1;
-        else if(colors[object_id].color.r == 0 && colors[object_id].color.g == 0 && colors[object_id].color.b == 1)active_tray = &blue_tray_1;
-        else continue;
-        new std::thread([&](){
-          panda_1_busy = true;
-          executeTrajectory(pnp_1,*it,active_tray);
-          panda_1_busy = false;
-        });
-        std::this_thread::sleep_for(0.2s);
-        it++;
+    arm_s.object = current_object_1;
+    
+    //bool panda_1_success = executeTrajectory(pnp_1, current_object_1.collisionObject,active_tray);
+    bool panda_1_success;
+
+    if (robot_arm.compare("panda_1") == 0)
+    {
+      panda_1_success = advancedExecuteTrajectory(arm_s, panda_arm, kinematic_model, 
+    kinematic_state, current_object_1.collisionObject,active_tray, 1, color);
+    }
+    else //(!planned_for_panda_2)
+    {
+      panda_1_success = advancedExecuteTrajectory(arm_s, panda_arm, kinematic_model, 
+    kinematic_state, current_object_1.collisionObject,active_tray, 2, color);
+    }
+          
+    if(!panda_1_success)
+    {
+      objs.push(current_object_1);
+    }else{
+      runner2.increment();
+      RCLCPP_INFO(LOGGER, "[checkpoint] {%s} successful placing. Request to spawn a new cube ", curren_planning_robot.c_str());
+            
+      if(runner2.check() >= number_of_test_cases){
+        RCLCPP_INFO(LOGGER, "[terminate]");
       }
-      else if (!panda_2_busy)
-      {
-        tray_helper* active_tray;
-        if(colors[object_id].color.r == 1 && colors[object_id].color.g == 0 && colors[object_id].color.b == 0)active_tray = &red_tray_2;
-        else if(colors[object_id].color.r == 0 && colors[object_id].color.g == 0 && colors[object_id].color.b == 1)active_tray = &blue_tray_2;
-        else continue;
-        new std::thread([&](){
-          panda_2_busy = true;
-          executeTrajectory(pnp_2,*it,active_tray);
-          panda_2_busy = false;
-        });
-        std::this_thread::sleep_for(0.2s);
-        it++;
+                 
+    }
+  }
+
+}
+
+
+bool advancedExecuteTrajectory(arm_state &arm_1_state, moveit::planning_interface::MoveGroupInterface &panda_1_arm,  
+  moveit::core::RobotModelConstPtr kinematic_model, moveit::core::RobotStatePtr kinematic_state, 
+  moveit_msgs::msg::CollisionObject &object, tray_helper *tray, int s, std::string color)
+{
+
+  RCLCPP_INFO(LOGGER, "Start execution of Object: %s", object.id.c_str());
+  geometry_msgs::msg::Pose pose;
+
+  std::string robot = "robot_1";
+
+
+  if(s == 1){
+    robot_1_state = ROBOT_STATE::PREGRASP;
+  }else if(s == 2){
+    robot_2_state = ROBOT_STATE::PREGRASP;
+  }
+
+  bool success = plan_and_move(arm_1_state, ROBOT_STATE::PREGRASP, kinematic_state, 1, panda_1_arm, tray, s);
+  
+  if (!success)
+  {
+    return false;
+  }
+
+  if(s == 1){
+    robot_1_state = ROBOT_STATE::GRASP;
+  }else if(s == 2){
+    robot_2_state = ROBOT_STATE::GRASP;
+  }
+
+  success = plan_and_move(arm_1_state, ROBOT_STATE::GRASP, kinematic_state, 1, panda_1_arm, tray, s);
+  
+  if (!success)
+  {
+    return false;
+  }
+
+  if(s == 1){
+    pnp_1->grasp_object(arm_1_state.object.collisionObject);
+  }else if(s == 2){
+    pnp_2->grasp_object(arm_1_state.object.collisionObject);
+  }
+
+  if(s == 1){
+    robot_1_state = ROBOT_STATE::PREMOVE;
+  }else if(s == 2){
+    robot_2_state = ROBOT_STATE::PREMOVE;
+  }
+  plan_and_move(arm_1_state, ROBOT_STATE::PREMOVE, kinematic_state, 1, panda_1_arm, tray, s);
+
+
+  if(s == 1){
+    robot_1_state = ROBOT_STATE::MOVE;
+  }else if(s == 2){
+    robot_2_state = ROBOT_STATE::MOVE;
+  }
+  plan_and_move(arm_1_state, ROBOT_STATE::MOVE, kinematic_state, 1, panda_1_arm, tray, s);
+
+  // // Task differentiation based on the color
+  // if (color.compare("BLUE") == 0){ 
+  //   plan_and_move(arm_1_state, ROBOT_STATE::RANDOM_1, kinematic_state, 1, panda_1_arm, tray, s);
+
+  //   //plan_and_move(arm_1_state, ROBOT_STATE::RANDOM_2, kinematic_state, 1, panda_1_arm, tray, s);
+  // }
+
+
+  if(s == 1){
+    robot_1_state = ROBOT_STATE::PUTDOWN;
+  }else if(s == 2){
+    robot_2_state = ROBOT_STATE::PUTDOWN;
+  }
+  plan_and_move(arm_1_state, ROBOT_STATE::PUTDOWN, kinematic_state, 1, panda_1_arm, tray, s);
+
+  if(s == 1){
+    pnp_1->release_object(arm_1_state.object.collisionObject);
+  }else if(s == 2){
+    pnp_2->release_object(arm_1_state.object.collisionObject);
+  } 
+  
+  if(s == 1){
+    robot_1_state = ROBOT_STATE::POSTMOVE;
+  }else if(s == 2){
+    robot_2_state = ROBOT_STATE::POSTMOVE;
+  }
+  plan_and_move(arm_1_state, ROBOT_STATE::POSTMOVE, kinematic_state, 1, panda_1_arm, tray, s);
+
+  return true;
+}
+
+
+
+bool plan_and_move(arm_state &arm_1_state, ROBOT_STATE movement, moveit::core::RobotStatePtr kinematic_state,
+                   double timeout, moveit::planning_interface::MoveGroupInterface &panda_arm, tray_helper *active_tray, int s)
+{
+  thread_local int cache_1;
+
+  if (movement == ROBOT_STATE::PREGRASP)
+  {
+    RCLCPP_INFO(LOGGER, "[Movement type pregrasp]");
+    arm_1_state.pose.position.x = arm_1_state.object.collisionObject.pose.position.x;
+    arm_1_state.pose.position.y = arm_1_state.object.collisionObject.pose.position.y;
+    arm_1_state.pose.position.z = arm_1_state.object.collisionObject.pose.position.z + 0.25;
+
+    arm_1_state.pose.orientation.x = arm_1_state.object.collisionObject.pose.orientation.w;
+    arm_1_state.pose.orientation.y = arm_1_state.object.collisionObject.pose.orientation.z;
+    arm_1_state.pose.orientation.z = 0;
+    arm_1_state.pose.orientation.w = 0;
+  }
+  else if (movement == ROBOT_STATE::GRASP)
+  {
+    RCLCPP_INFO(LOGGER, "[Movement type grasp]");
+    arm_1_state.pose.position.z = arm_1_state.object.collisionObject.pose.position.z + 0.1;
+  }
+  else if (movement == ROBOT_STATE::PREMOVE)
+  {
+    RCLCPP_INFO(LOGGER, "[Movement type pre move]");
+    arm_1_state.pose.position.z = arm_1_state.object.collisionObject.pose.position.z + 0.25;
+  }
+  else if (movement == ROBOT_STATE::MOVE)
+  {
+    RCLCPP_INFO(LOGGER, "[Movement type move]");
+    arm_1_state.pose.position.x = active_tray->get_x();
+    arm_1_state.pose.position.y = active_tray->get_y();
+    arm_1_state.pose.position.z = 1.28 + active_tray->z * 0.05;
+
+    arm_1_state.pose.orientation.x = 1;
+    arm_1_state.pose.orientation.y = 0;
+
+    cache_1 = active_tray->z * 0.05;
+
+    active_tray->next();
+  }
+  else if (movement == ROBOT_STATE::PUTDOWN)
+  {
+    RCLCPP_INFO(LOGGER, "[Movement type putdown move]");
+    arm_1_state.pose.position.z = 1.141 + cache_1;
+  }
+  else if (movement == ROBOT_STATE::POSTMOVE)
+  {
+    RCLCPP_INFO(LOGGER, "[Movement type post move]");
+    arm_1_state.pose.position.z = 1.28 + cache_1;
+  }
+
+  // else if (movement == ROBOT_STATE::RANDOM_1)
+  // {
+  //   RCLCPP_INFO(LOGGER, "[Movement type random 1]");
+  //   arm_1_state.pose.position.z = 1.48 + cache_1;
+  //   std::this_thread::sleep_for(5.0s);
+  // }
+
+  else if (movement == ROBOT_STATE::RANDOM_2)
+  {
+    RCLCPP_INFO(LOGGER, "[Movement type random 2]");
+     arm_1_state.pose.position.z = 1.48 + cache_1;
+  }
+
+  bool executionSuccessful = false;
+  int counter = 0;
+
+  while (!executionSuccessful)
+  {
+    bool a_bot_found_ik = kinematic_state->setFromIK(arm_1_state.arm_joint_model_group, arm_1_state.pose, timeout);
+      
+    if (a_bot_found_ik)
+    {
+      kinematic_state->copyJointGroupPositions(arm_1_state.arm_joint_model_group, arm_1_state.arm_joint_values);
+      panda_arm.setJointValueTarget(arm_1_state.arm_joint_names, arm_1_state.arm_joint_values);
+      RCLCPP_INFO(LOGGER, "IK found for arm 1");
+    }
+
+    moveit::planning_interface::MoveGroupInterface::Plan my_plan;
+    if (a_bot_found_ik)
+    {
+      executionSuccessful = panda_arm.move() == moveit::core::MoveItErrorCode::SUCCESS;
+      if(!executionSuccessful){
+        objs.push(arm_1_state.object);
+
+        // most cases move fails because of the gripper not opening
+        if(s == 1){
+          pnp_1->open_gripper();
+        }else if(s == 2){
+          pnp_2->open_gripper();
+        }
+        return false;
       }
     }
-    r.sleep();
+    else
+    {
+      if (movement == ROBOT_STATE::PREGRASP || movement == ROBOT_STATE::GRASP)
+      {
+        objs.push(arm_1_state.object);
+        return false;
+      }
+    }
   }
-}
-bool executeTrajectory(std::shared_ptr<primitive_pick_and_place> pnp,moveit_msgs::msg::CollisionObject& object,tray_helper* tray)
-{ 
-  RCLCPP_INFO(LOGGER,"Start execution of Object: %s",object.id.c_str());
-  geometry_msgs::msg::Pose pose;
-  pnp->open_gripper();
-
-  std::this_thread::sleep_for(0.2s);
-
-  //Pre Grasp
-  pose.position.x = object.pose.position.x;
-  pose.position.y = object.pose.position.y;
-  pose.position.z = object.pose.position.z + 0.25;
-
-  pose.orientation.x = object.pose.orientation.w;
-  pose.orientation.y = object.pose.orientation.z;
-  pose.orientation.z = 0;
-  pose.orientation.w = 0;
-
-  while(!(pnp->set_joint_values_from_pose(pose) && pnp->generate_plan() && pnp->execute()))
-  {
-    RCLCPP_INFO(LOGGER,"Try again");
-  }
-  //Grasp
-  pose.position.z = object.pose.position.z + 0.1;
-
-  while(!(pnp->set_joint_values_from_pose(pose) && pnp->generate_plan() && pnp->execute()))
-  {
-    RCLCPP_INFO(LOGGER,"Try again");
-  }
-  pnp->grasp_object(object);
-  RCLCPP_INFO(LOGGER,"Grasping object with ID %s",object.id.c_str());
-
-  //Once grasped, no turning back! From now, ensure execution with while
-
-  //Pre Move
-  pose.position.z = object.pose.position.z + 0.25;
-
-  while(!(pnp->set_joint_values_from_pose(pose) && pnp->generate_plan() && pnp->execute()))
-  {
-    RCLCPP_INFO(LOGGER,"Try again");
-  }
-
-  //Move
-  pose.position.x = tray->get_x();
-  pose.position.y = tray->get_y();
-  pose.position.z = 1.28 + tray->z * 0.05;
-
-  pose.orientation.x = 1;
-  pose.orientation.y = 0;
-
-  while(!(pnp->set_joint_values_from_pose(pose) && pnp->generate_plan() && pnp->execute()))
-  {
-    RCLCPP_INFO(LOGGER,"Try again 2");
-  }
-  // Put down
-  pose.position.z = 1.141 + tray->z * 0.05;
-
-  while(!(pnp->set_joint_values_from_pose(pose) && pnp->generate_plan() && pnp->execute()))
-  {
-    RCLCPP_INFO(LOGGER,"Try again 3");
-  }
-  pnp->release_object(object);
-  //Post Move
-  pose.position.z = 1.28 + tray->z * 0.05; 
-
-  while(!(pnp->set_joint_values_from_pose(pose) && pnp->generate_plan() && pnp->execute()))
-  {
-    RCLCPP_INFO(LOGGER,"Try again 4");
-  }
-  tray->next();
-
   return true;
 }
